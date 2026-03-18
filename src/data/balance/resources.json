@@ -1,0 +1,37 @@
+{
+  "baseCaps": {
+    "scrap": 1000,
+    "power": 600,
+    "core": 200
+  },
+  "startingResources": {
+    "scrap": 400,
+    "power": 180,
+    "core": 20
+  },
+  "startingRoster": {
+    "scavenger": 2,
+    "rifleman": 2,
+    "shieldbot": 0,
+    "rocket_buggy": 0,
+    "repair_drone": 0
+  },
+  "maxOfflineHours": 4,
+  "raidSquadSize": 4,
+  "maxLogs": 200,
+  "saveVersion": 1,
+  "slotIds": [
+    "hq",
+    "north_1",
+    "north_2",
+    "east_1",
+    "east_2",
+    "south_1",
+    "south_2",
+    "west_1",
+    "west_2",
+    "core_1",
+    "core_2",
+    "core_3"
+  ]
+}

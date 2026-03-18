@@ -1,0 +1,98 @@
+[
+  {
+    "id": "scavenger",
+    "name": "Scavenger",
+    "role": "raider",
+    "unlockHqLevel": 1,
+    "trainBuildingId": "barracks",
+    "cost": { "scrap": 50, "power": 0, "core": 0 },
+    "trainSec": 12,
+    "stats": {
+      "hp": 90,
+      "atk": 14,
+      "def": 2,
+      "range": 70,
+      "attackInterval": 0.9,
+      "moveSpeed": 95,
+      "carry": 20,
+      "buildingBonus": 0.9
+    }
+  },
+  {
+    "id": "rifleman",
+    "name": "Rifleman",
+    "role": "ranged",
+    "unlockHqLevel": 1,
+    "trainBuildingId": "barracks",
+    "cost": { "scrap": 70, "power": 10, "core": 0 },
+    "trainSec": 15,
+    "stats": {
+      "hp": 120,
+      "atk": 18,
+      "def": 3,
+      "range": 130,
+      "attackInterval": 1.1,
+      "moveSpeed": 75,
+      "carry": 15,
+      "buildingBonus": 1
+    }
+  },
+  {
+    "id": "shieldbot",
+    "name": "Shieldbot",
+    "role": "tank",
+    "unlockHqLevel": 3,
+    "trainBuildingId": "garage",
+    "cost": { "scrap": 90, "power": 30, "core": 0 },
+    "trainSec": 20,
+    "stats": {
+      "hp": 260,
+      "atk": 10,
+      "def": 8,
+      "range": 80,
+      "attackInterval": 1.2,
+      "moveSpeed": 55,
+      "carry": 10,
+      "buildingBonus": 1
+    }
+  },
+  {
+    "id": "rocket_buggy",
+    "name": "Rocket Buggy",
+    "role": "siege",
+    "unlockHqLevel": 3,
+    "trainBuildingId": "garage",
+    "cost": { "scrap": 120, "power": 60, "core": 0 },
+    "trainSec": 24,
+    "stats": {
+      "hp": 180,
+      "atk": 22,
+      "def": 4,
+      "range": 160,
+      "attackInterval": 1.6,
+      "moveSpeed": 100,
+      "carry": 12,
+      "buildingBonus": 1.7
+    }
+  },
+  {
+    "id": "repair_drone",
+    "name": "Repair Drone",
+    "role": "support",
+    "unlockHqLevel": 3,
+    "trainBuildingId": "garage",
+    "cost": { "scrap": 80, "power": 50, "core": 0 },
+    "trainSec": 22,
+    "stats": {
+      "hp": 100,
+      "atk": 0,
+      "def": 2,
+      "range": 140,
+      "attackInterval": 1.2,
+      "moveSpeed": 85,
+      "carry": 0,
+      "heal": 18,
+      "buildingBonus": 1
+    }
+  }
+]

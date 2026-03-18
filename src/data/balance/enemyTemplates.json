@@ -1,0 +1,55 @@
+[
+  {
+    "id": "zone1_easy_a",
+    "name": "Loose Scrap Camp",
+    "difficulty": "easy",
+    "zoneTier": 1,
+    "turrets": 1,
+    "hqHp": 700,
+    "storedRewards": { "scrap": 120, "power": 40, "core": 12 },
+    "defenders": [
+      { "unitId": "scavenger", "count": 2 },
+      { "unitId": "rifleman", "count": 1 }
+    ]
+  },
+  {
+    "id": "zone1_normal_a",
+    "name": "Welded Checkpoint",
+    "difficulty": "normal",
+    "zoneTier": 1,
+    "turrets": 2,
+    "hqHp": 820,
+    "storedRewards": { "scrap": 170, "power": 65, "core": 18 },
+    "defenders": [
+      { "unitId": "scavenger", "count": 2 },
+      { "unitId": "rifleman", "count": 2 }
+    ]
+  },
+  {
+    "id": "zone1_hard_a",
+    "name": "Burned Relay",
+    "difficulty": "hard",
+    "zoneTier": 1,
+    "turrets": 2,
+    "hqHp": 920,
+    "storedRewards": { "scrap": 230, "power": 90, "core": 25 },
+    "defenders": [
+      { "unitId": "scavenger", "count": 2 },
+      { "unitId": "rifleman", "count": 3 }
+    ]
+  },
+  {
+    "id": "zone1_elite_a",
+    "name": "Core Hoarder Nest",
+    "difficulty": "elite",
+    "zoneTier": 1,
+    "turrets": 3,
+    "hqHp": 1050,
+    "storedRewards": { "scrap": 320, "power": 120, "core": 36 },
+    "defenders": [
+      { "unitId": "scavenger", "count": 2 },
+      { "unitId": "rifleman", "count": 3 },
+      { "unitId": "shieldbot", "count": 1 }
+    ]
+  }
+]

@@ -1,0 +1,93 @@
+[
+  {
+    "id": "command_center",
+    "name": "Command Center",
+    "role": "hq",
+    "maxCount": 1,
+    "unlockHqLevel": 1,
+    "buildTimeSec": 0,
+    "cost": { "scrap": 0, "power": 0, "core": 0 },
+    "stats": { "hp": 900 }
+  },
+  {
+    "id": "scrap_yard",
+    "name": "Scrap Yard",
+    "role": "production",
+    "maxCount": 6,
+    "unlockHqLevel": 1,
+    "buildTimeSec": 20,
+    "cost": { "scrap": 120, "power": 0, "core": 0 },
+    "stats": {
+      "hp": 220,
+      "productionPerMin": { "scrap": 24 }
+    }
+  },
+  {
+    "id": "generator",
+    "name": "Generator",
+    "role": "production",
+    "maxCount": 6,
+    "unlockHqLevel": 1,
+    "buildTimeSec": 20,
+    "cost": { "scrap": 100, "power": 0, "core": 0 },
+    "stats": {
+      "hp": 220,
+      "productionPerMin": { "power": 16 }
+    }
+  },
+  {
+    "id": "barracks",
+    "name": "Barracks",
+    "role": "training",
+    "maxCount": 2,
+    "unlockHqLevel": 1,
+    "buildTimeSec": 30,
+    "cost": { "scrap": 160, "power": 40, "core": 0 },
+    "stats": {
+      "hp": 340,
+      "queueCapacity": 2
+    }
+  },
+  {
+    "id": "garage",
+    "name": "Garage",
+    "role": "training",
+    "maxCount": 2,
+    "unlockHqLevel": 3,
+    "buildTimeSec": 45,
+    "cost": { "scrap": 240, "power": 120, "core": 0 },
+    "stats": {
+      "hp": 380,
+      "queueCapacity": 2
+    }
+  },
+  {
+    "id": "storage",
+    "name": "Storage",
+    "role": "storage",
+    "maxCount": 3,
+    "unlockHqLevel": 2,
+    "buildTimeSec": 25,
+    "cost": { "scrap": 180, "power": 60, "core": 0 },
+    "stats": {
+      "hp": 300,
+      "storageBonus": { "scrap": 500, "power": 500, "core": 100 }
+    }
+  },
+  {
+    "id": "auto_turret",
+    "name": "Auto Turret",
+    "role": "defense",
+    "maxCount": 6,
+    "unlockHqLevel": 2,
+    "buildTimeSec": 20,
+    "cost": { "scrap": 140, "power": 80, "core": 0 },
+    "stats": {
+      "hp": 320,
+      "attack": 20,
+      "defense": 4,
+      "range": 180,
+      "attackInterval": 1
+    }
+  }
+]

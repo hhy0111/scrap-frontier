@@ -1,0 +1,22 @@
+:root {
+  color-scheme: dark;
+  font-family: Consolas, "Courier New", monospace;
+  background: #151312;
+  color: #f3ead9;
+}
+
+html,
+body,
+#app {
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  overflow: hidden;
+  background:
+    radial-gradient(circle at top, rgba(25, 90, 92, 0.3), transparent 40%),
+    linear-gradient(180deg, #241b16 0%, #14100d 100%);
+}
+
+canvas {
+  display: block;
+}
