@@ -241,6 +241,8 @@ export class BaseScene extends Phaser.Scene {
       fontFamily: 'monospace',
       wordWrap: { width: 186 }
     });
+    addAssetImage(this, 'ui_badge_daily_mission', 724, 148, 42);
+    addAssetImage(this, 'ui_icon_alert', 1086, 146, 40);
     this.counterText = this.add.text(1062, 118, '', {
       fontSize: '13px',
       color: '#fff1de',

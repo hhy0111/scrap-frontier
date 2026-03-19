@@ -1,5 +1,5 @@
 import Phaser from 'phaser';
-import { addAssetImage } from '../app/assets';
+import { addAssetImage, addSizedAssetImage } from '../app/assets';
 import { gameStore } from '../state/gameState';
 import { createTutorialOverlay } from './TutorialOverlay';
 import { createButton, createPanel } from './ui';
@@ -17,8 +17,10 @@ export class ScoutScene extends Phaser.Scene {
     this.cameras.main.setBackgroundColor('#10171b');
     createPanel(this, 18, 14, 1244, 56, undefined, 0x35574a);
     createPanel(this, 18, 82, 1244, 588, 'SCOUT TARGETS', 0x8ef2d3);
+    addSizedAssetImage(this, 'meta_loading_art', 1004, 376, 480, 270, 0.24).setAngle(-6);
+    addAssetImage(this, 'ui_icon_scout', 66, 42, 42);
 
-    this.add.text(24, 20, 'SCOUT TARGETS', {
+    this.add.text(98, 20, 'SCOUT TARGETS', {
       fontSize: '28px',
       color: '#9fe7f2',
       fontFamily: 'monospace'
@@ -59,6 +61,23 @@ export class ScoutScene extends Phaser.Scene {
       });
 
       this.add.rectangle(x, y, 384, 56, 0x284148, 0.45).setOrigin(0);
+      const cardArt = addSizedAssetImage(this, 'ui_scout_card', x + 192, y + 154, 344, 210, 0.96);
+      this.targetObjects.push(cardArt);
+      const targetPreview = addSizedAssetImage(
+        this,
+        'building_command_center',
+        x + 278,
+        y + 168,
+        136,
+        136,
+        0.92
+      );
+      this.targetObjects.push(targetPreview);
+      const marker = addAssetImage(this, 'fx_target_marker', x + 96, y + 164, 96).setAlpha(
+        isSelected ? 0.95 : 0.35
+      );
+      marker.setAngle(isSelected ? 10 : -8);
+      this.targetObjects.push(marker);
       const difficultyColor =
         target.difficulty === 'elite'
           ? '#ffb38a'
@@ -87,8 +106,8 @@ export class ScoutScene extends Phaser.Scene {
 
       const detail = this.add.text(
         x + 60,
-        y + 102,
-        `SCRAP ${target.storedRewards.scrap}\nPOWER ${target.storedRewards.power}\nCORE ${target.storedRewards.core}\n\nZONE ${target.zoneTier}\nSELECTED ${isSelected ? 'YES' : 'NO'}\n\n이 카드에서 Prepare Raid를 누르면 분대 편성 화면으로 이동한다.`,
+        y + 258,
+        `SCRAP ${target.storedRewards.scrap}\nPOWER ${target.storedRewards.power}\nCORE ${target.storedRewards.core}\n\nZONE ${target.zoneTier}\nSTATUS ${isSelected ? 'LOCKED TARGET' : 'SCAN READY'}\n\nPrepare Raid로 분대 편성과 진입 라인을 정한다.`,
         {
           fontSize: '16px',
           color: '#f3ead9',
@@ -112,6 +131,8 @@ export class ScoutScene extends Phaser.Scene {
         0x35574a
       );
       this.targetObjects.push(attackButton);
+      const attackIcon = addAssetImage(this, 'ui_icon_raid', x + 56, y + 424, 28);
+      this.targetObjects.push(attackIcon);
     });
   }
 }

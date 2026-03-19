@@ -1,5 +1,5 @@
 import Phaser from 'phaser';
-import { addUnitImage } from '../app/assets';
+import { addAssetImage, addSizedAssetImage, addUnitImage } from '../app/assets';
 import { getSquadPower } from '../domain/ai/generateScoutTargets';
 import { buildRaidSquad, startRaid } from '../domain/raid/startRaid';
 import { balance, gameStore } from '../state/gameState';
@@ -42,15 +42,20 @@ export class RaidPrepScene extends Phaser.Scene {
     createPanel(this, 18, 14, 1244, 56, undefined, 0x4d3323);
     createPanel(this, 18, 82, 450, 590, 'TARGET OVERVIEW', 0x8ef2d3);
     createPanel(this, 482, 82, 780, 590, 'SQUAD SETUP', 0xd08c55);
+    addAssetImage(this, 'ui_icon_raid', 64, 42, 40);
 
-    this.add.text(24, 20, 'RAID PREP', {
+    this.add.text(92, 20, 'RAID PREP', {
       fontSize: '28px',
       color: '#f2d2a4',
       fontFamily: 'monospace'
     });
 
+    addSizedAssetImage(this, 'ui_scout_card', 243, 204, 390, 220, 0.94);
+    addSizedAssetImage(this, 'building_command_center', 286, 208, 160, 160, 0.94);
+    addAssetImage(this, 'fx_target_marker', 116, 206, 92).setAlpha(0.9);
+
     this.targetText = this.add.text(34, 118, '', {
-      fontSize: '18px',
+      fontSize: '17px',
       color: '#f3ead9',
       fontFamily: 'monospace',
       wordWrap: { width: 412 }
@@ -181,7 +186,7 @@ export class RaidPrepScene extends Phaser.Scene {
     }
 
     this.targetText?.setText(
-      `${target.name}\n\nDIFF ${target.difficulty.toUpperCase()}\nRECOMMENDED POWER ${target.recommendedPower}\nZONE ${target.zoneTier}\n\nREWARDS\nSCRAP ${target.storedRewards.scrap}\nPOWER ${target.storedRewards.power}\nCORE ${target.storedRewards.core}\n\nTIP\n기본은 MID 라인이다. 좌우 라인은 적 터렛 배치가 몰린 경우 우회 선택지로 사용한다.`
+      `${target.name}\nDIFF ${target.difficulty.toUpperCase()} | ZONE ${target.zoneTier}\nRECOMMENDED POWER ${target.recommendedPower}\n\nREWARDS\nSCRAP ${target.storedRewards.scrap}\nPOWER ${target.storedRewards.power}\nCORE ${target.storedRewards.core}\n\nTIP\n기본은 MID 라인이다.\n좌우 라인은 적 터렛 사선을 비틀 때 쓴다.`
     );
 
     const totalUnits = Object.values(this.squad).reduce((sum, count) => sum + count, 0);

@@ -20,6 +20,17 @@ export const addAssetImage = (
 ): Phaser.GameObjects.Image =>
   scene.add.image(x, y, textureKey).setDisplaySize(size, size);
 
+export const addSizedAssetImage = (
+  scene: Phaser.Scene,
+  textureKey: string,
+  x: number,
+  y: number,
+  width: number,
+  height: number,
+  alpha = 1
+): Phaser.GameObjects.Image =>
+  scene.add.image(x, y, textureKey).setDisplaySize(width, height).setAlpha(alpha);
+
 export const addBuildingImage = (
   scene: Phaser.Scene,
   buildingId: string,

@@ -1,5 +1,5 @@
 import Phaser from 'phaser';
-import { addAssetImage } from '../app/assets';
+import { addAssetImage, addSizedAssetImage } from '../app/assets';
 import { gameStore } from '../state/gameState';
 import { getLastRaidResolution, setLastRaidResolution } from '../state/session';
 import { createTutorialOverlay } from './TutorialOverlay';
@@ -18,14 +18,28 @@ export class ResultScene extends Phaser.Scene {
     createPanel(this, 18, 14, 1244, 56, undefined, 0x4d3323);
     createPanel(this, 18, 82, 400, 588, 'RESULT SUMMARY', 0x8ef2d3);
     createPanel(this, 432, 82, 830, 588, 'BATTLE REPORT', 0xd08c55);
+    addSizedAssetImage(this, 'meta_loading_art', 1024, 404, 420, 280, 0.18).setAngle(5);
+    addAssetImage(this, 'ui_icon_raid', 64, 42, 40);
 
-    this.add.text(24, 20, 'RAID RESULT', {
+    this.add.text(96, 20, 'RAID RESULT', {
       fontSize: '30px',
       color: '#f4ddb6',
       fontFamily: 'monospace'
     });
 
     if (resolution && battle) {
+      const bannerKey = battle.victory ? 'ui_banner_victory' : 'ui_banner_defeat';
+      addSizedAssetImage(this, bannerKey, 848, 178, 640, 170, 0.96).setDepth(1);
+      addSizedAssetImage(
+        this,
+        battle.victory ? 'building_command_center' : 'building_command_center_damaged',
+        1088,
+        256,
+        140,
+        140,
+        0.96
+      ).setDepth(2);
+
       addAssetImage(this, 'resource_scrap', 48, 236, 34);
       addAssetImage(this, 'resource_power', 48, 278, 34);
       addAssetImage(this, 'resource_core', 48, 320, 34);
@@ -33,9 +47,9 @@ export class ResultScene extends Phaser.Scene {
       this.add.text(
         34,
         118,
-        `RESULT ${resolution.result.toUpperCase()}\nDURATION ${battle.durationSec}s\nTARGET ${battle.targetId}\nVICTORY ${battle.victory ? 'YES' : 'NO'}`,
+        `RESULT ${resolution.result.toUpperCase()}\nDURATION ${battle.durationSec}s\nTARGET ${battle.targetId}\nVICTORY ${battle.victory ? 'YES' : 'NO'}\n\nOUTCOME\n${battle.victory ? 'Base cracked. Loot secured.' : 'Raid stalled. Recover and re-arm.'}`,
         {
-          fontSize: '20px',
+          fontSize: '18px',
           color: '#f3ead9',
           fontFamily: 'monospace',
           wordWrap: { width: 360 }
@@ -55,14 +69,14 @@ export class ResultScene extends Phaser.Scene {
 
       this.add.text(
         450,
-        118,
+        274,
         `SURVIVORS\n${Object.entries(battle.survivors)
           .map(([unitId, count]) => `${unitId}: ${count}`)
           .join('\n')}\n\nLOSSES\n${Object.entries(battle.lost)
           .map(([unitId, count]) => `${unitId}: ${count}`)
           .join('\n')}\n\nNEXT LOOP\n1. Return to base and invest resources.\n2. Refill missing units.\n3. Scout a new target and repeat.`,
         {
-          fontSize: '18px',
+          fontSize: '17px',
           color: '#f3ead9',
           fontFamily: 'monospace',
           wordWrap: { width: 760 }
