@@ -12,6 +12,8 @@ export const ASSET_MANIFEST: AssetEntry[] = [
   { key: 'ui_icon_raid', src: '/assets/generated/ui/ui_icon_raid.png' },
   { key: 'ui_icon_scout', src: '/assets/generated/ui/ui_icon_scout.png' },
   { key: 'ui_scout_card', src: '/assets/generated/ui/ui_scout_card.png' },
+  { key: 'ui_shop_pack_card', src: '/assets/generated/ui/ui_shop_pack_card.png' },
+  { key: 'ui_button_rewarded_ad', src: '/assets/generated/ui/ui_button_rewarded_ad.png' },
   { key: 'ui_banner_victory', src: '/assets/generated/ui/ui_banner_victory.png' },
   { key: 'ui_banner_defeat', src: '/assets/generated/ui/ui_banner_defeat.png' },
   { key: 'building_command_center', src: '/assets/generated/buildings/building_command_center.png' },
@@ -42,7 +44,9 @@ export const ASSET_MANIFEST: AssetEntry[] = [
   { key: 'fx_rocket_launch', src: '/assets/generated/fx/fx_rocket_launch.png' },
   { key: 'fx_target_marker', src: '/assets/generated/fx/fx_target_marker.png' },
   { key: 'fx_destroyed_smoke', src: '/assets/generated/fx/fx_destroyed_smoke.png' },
-  { key: 'meta_loading_art', src: '/assets/generated/meta/meta_loading_art.png' }
+  { key: 'meta_loading_art', src: '/assets/generated/meta/meta_loading_art.png' },
+  { key: 'meta_store_capsule_bg', src: '/assets/generated/meta/meta_store_capsule_bg.png' },
+  { key: 'meta_app_icon', src: '/assets/generated/meta/meta_app_icon.png' }
 ];
 
 export const getBuildingAssetKey = (buildingId: string): string => `building_${buildingId}`;

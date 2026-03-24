@@ -1,0 +1,184 @@
+apply plugin: 'com.android.application'
+
+import java.util.Properties
+
+def loadPropertiesFile = { File file ->
+    def properties = new Properties()
+    if (file.exists()) {
+        file.withInputStream { stream ->
+            properties.load(stream)
+        }
+    }
+    return properties
+}
+
+def releaseProperties = loadPropertiesFile(rootProject.file('release.properties'))
+def keystoreProperties = loadPropertiesFile(rootProject.file('keystore.properties'))
+
+def readConfigValue = { List<String> keys, String fallback ->
+    for (String key : keys) {
+        def projectValue = project.findProperty(key)
+        if (projectValue != null && projectValue.toString().trim()) {
+            return projectValue.toString().trim()
+        }
+
+        def releaseValue = releaseProperties.getProperty(key)
+        if (releaseValue != null && releaseValue.trim()) {
+            return releaseValue.trim()
+        }
+
+        def envValue = System.getenv(key)
+        if (envValue != null && envValue.trim()) {
+            return envValue.trim()
+        }
+    }
+
+    return fallback
+}
+
+def sampleAdMobAppId = 'ca-app-pub-3940256099942544~3347511713'
+def appVersionCode = Integer.parseInt(readConfigValue(['SCRAP_VERSION_CODE'], '1'))
+def appVersionName = readConfigValue(['SCRAP_VERSION_NAME'], '1.0')
+
+def createManifestPlaceholders = { String buildTypeName ->
+    def suffix = buildTypeName.toUpperCase()
+    def isReleaseBuild = buildTypeName == 'release'
+
+    return [
+        SCRAP_COMMERCE_MODE: readConfigValue(
+            ["SCRAP_COMMERCE_MODE_${suffix}", 'SCRAP_COMMERCE_MODE'],
+            isReleaseBuild ? 'play-services' : 'local-simulator'
+        ),
+        SCRAP_COMMERCE_PURCHASES_ENABLED: readConfigValue(
+            ["SCRAP_COMMERCE_PURCHASES_ENABLED_${suffix}", 'SCRAP_COMMERCE_PURCHASES_ENABLED'],
+            'true'
+        ),
+        SCRAP_COMMERCE_REWARDED_ENABLED: readConfigValue(
+            ["SCRAP_COMMERCE_REWARDED_ENABLED_${suffix}", 'SCRAP_COMMERCE_REWARDED_ENABLED'],
+            'true'
+        ),
+        SCRAP_STARTER_PACK_PRODUCT_ID: readConfigValue(
+            ["SCRAP_STARTER_PACK_PRODUCT_ID_${suffix}", 'SCRAP_STARTER_PACK_PRODUCT_ID'],
+            ''
+        ),
+        SCRAP_COMMANDER_PACK_PRODUCT_ID: readConfigValue(
+            ["SCRAP_COMMANDER_PACK_PRODUCT_ID_${suffix}", 'SCRAP_COMMANDER_PACK_PRODUCT_ID'],
+            ''
+        ),
+        SCRAP_MONTHLY_PASS_PRODUCT_ID: readConfigValue(
+            ["SCRAP_MONTHLY_PASS_PRODUCT_ID_${suffix}", 'SCRAP_MONTHLY_PASS_PRODUCT_ID'],
+            ''
+        ),
+        SCRAP_SALVAGE_DROP_AD_UNIT_ID: readConfigValue(
+            ["SCRAP_SALVAGE_DROP_AD_UNIT_ID_${suffix}", 'SCRAP_SALVAGE_DROP_AD_UNIT_ID'],
+            ''
+        ),
+        SCRAP_SCOUT_PING_AD_UNIT_ID: readConfigValue(
+            ["SCRAP_SCOUT_PING_AD_UNIT_ID_${suffix}", 'SCRAP_SCOUT_PING_AD_UNIT_ID'],
+            ''
+        ),
+        SCRAP_OFFLINE_OVERDRIVE_AD_UNIT_ID: readConfigValue(
+            ["SCRAP_OFFLINE_OVERDRIVE_AD_UNIT_ID_${suffix}", 'SCRAP_OFFLINE_OVERDRIVE_AD_UNIT_ID'],
+            ''
+        ),
+        SCRAP_BASE_LOBBY_BANNER_AD_UNIT_ID: readConfigValue(
+            ["SCRAP_BASE_LOBBY_BANNER_AD_UNIT_ID_${suffix}", 'SCRAP_BASE_LOBBY_BANNER_AD_UNIT_ID'],
+            ''
+        ),
+        SCRAP_ADMOB_APP_ID: readConfigValue(
+            ["SCRAP_ADMOB_APP_ID_${suffix}", 'SCRAP_ADMOB_APP_ID'],
+            sampleAdMobAppId
+        )
+    ]
+}
+
+def readKeystoreValue = { String propertyKey, String envKey ->
+    def propertiesValue = keystoreProperties.getProperty(propertyKey)
+    if (propertiesValue != null && propertiesValue.trim()) {
+        return propertiesValue.trim()
+    }
+
+    return readConfigValue([envKey], '')
+}
+
+def releaseStoreFile = readKeystoreValue('storeFile', 'SCRAP_RELEASE_STORE_FILE')
+def releaseStorePassword = readKeystoreValue('storePassword', 'SCRAP_RELEASE_STORE_PASSWORD')
+def releaseKeyAlias = readKeystoreValue('keyAlias', 'SCRAP_RELEASE_KEY_ALIAS')
+def releaseKeyPassword = readKeystoreValue('keyPassword', 'SCRAP_RELEASE_KEY_PASSWORD')
+def hasReleaseSigning =
+    releaseStoreFile &&
+    releaseStorePassword &&
+    releaseKeyAlias &&
+    releaseKeyPassword
+
+android {
+    namespace "com.hhy0111.scrapfrontier"
+    compileSdk rootProject.ext.compileSdkVersion
+    signingConfigs {
+        release {
+            if (hasReleaseSigning) {
+                storeFile rootProject.file(releaseStoreFile)
+                storePassword releaseStorePassword
+                keyAlias releaseKeyAlias
+                keyPassword releaseKeyPassword
+            }
+        }
+    }
+    defaultConfig {
+        applicationId "com.hhy0111.scrapfrontier"
+        minSdkVersion rootProject.ext.minSdkVersion
+        targetSdkVersion rootProject.ext.targetSdkVersion
+        versionCode appVersionCode
+        versionName appVersionName
+        testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
+        aaptOptions {
+             // Files and dirs to omit from the packaged assets dir, modified to accommodate modern web apps.
+             // Default: https://android.googlesource.com/platform/frameworks/base/+/282e181b58cf72b6ca770dc7ca5f91f135444502/tools/aapt/AaptAssets.cpp#61
+            ignoreAssetsPattern '!.svn:!.git:!.ds_store:!*.scc:.*:!CVS:!thumbs.db:!picasa.ini:!*~'
+        }
+    }
+    buildTypes {
+        debug {
+            manifestPlaceholders = createManifestPlaceholders('debug')
+        }
+        release {
+            manifestPlaceholders = createManifestPlaceholders('release')
+            minifyEnabled false
+            proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
+            if (hasReleaseSigning) {
+                signingConfig signingConfigs.release
+            }
+        }
+    }
+}
+
+repositories {
+    flatDir{
+        dirs '../capacitor-cordova-android-plugins/src/main/libs', 'libs'
+    }
+}
+
+dependencies {
+    implementation fileTree(include: ['*.jar'], dir: 'libs')
+    implementation "androidx.appcompat:appcompat:$androidxAppCompatVersion"
+    implementation "androidx.coordinatorlayout:coordinatorlayout:$androidxCoordinatorLayoutVersion"
+    implementation "androidx.core:core-splashscreen:$coreSplashScreenVersion"
+    implementation "com.android.billingclient:billing:$playBillingVersion"
+    implementation "com.google.android.gms:play-services-ads:$googleMobileAdsVersion"
+    implementation project(':capacitor-android')
+    testImplementation "junit:junit:$junitVersion"
+    androidTestImplementation "androidx.test.ext:junit:$androidxJunitVersion"
+    androidTestImplementation "androidx.test.espresso:espresso-core:$androidxEspressoCoreVersion"
+    implementation project(':capacitor-cordova-android-plugins')
+}
+
+apply from: 'capacitor.build.gradle'
+
+try {
+    def servicesJSON = file('google-services.json')
+    if (servicesJSON.text) {
+        apply plugin: 'com.google.gms.google-services'
+    }
+} catch(Exception e) {
+    logger.info("google-services.json not found, google-services plugin not applied. Push Notifications won't work")
+}

@@ -1,0 +1,16 @@
+{
+  "name": "Scrap Frontier",
+  "short_name": "Scrap Frontier",
+  "description": "Portrait auto-raid scavenger battler built with Phaser and Capacitor.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#14100d",
+  "theme_color": "#14100d",
+  "icons": [
+    {
+      "src": "/assets/generated/meta/meta_app_icon.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    }
+  ]
+}

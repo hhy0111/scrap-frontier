@@ -1,5 +1,7 @@
 import { nextId } from '../../utils/ids';
-import type { BalanceData } from '../../types/balance';
+import { getEffectiveUnitStats } from '../meta/research';
+import { getUnitPower } from '../ai/generateScoutTargets';
+import type { BalanceData, EnemyTemplate } from '../../types/balance';
 import type { GameState, ScoutTarget } from '../../types/game';
 import type { EntryLane, RaidActor, RaidState } from '../../types/raid';
 
@@ -7,9 +9,11 @@ const createPlayerActor = (
   unitId: string,
   index: number,
   entryLane: EntryLane,
-  balance: BalanceData
+  balance: BalanceData,
+  state: GameState
 ): RaidActor => {
   const unit = balance.unitMap[unitId];
+  const stats = getEffectiveUnitStats(unitId, balance, state.meta.researches) ?? unit.stats;
   const laneYBase: Record<EntryLane, number> = {
     left: 150,
     mid: 250,
@@ -23,16 +27,16 @@ const createPlayerActor = (
     label: unit.name,
     team: 'player',
     kind: 'unit',
-    hp: unit.stats.hp,
-    maxHp: unit.stats.hp,
-    atk: unit.stats.atk,
-    def: unit.stats.def,
-    range: unit.stats.range,
-    attackInterval: unit.stats.attackInterval,
-    moveSpeed: unit.stats.moveSpeed,
-    carry: unit.stats.carry,
-    heal: unit.stats.heal ?? 0,
-    buildingBonus: unit.stats.buildingBonus ?? 1,
+    hp: stats.hp,
+    maxHp: stats.hp,
+    atk: stats.atk,
+    def: stats.def,
+    range: stats.range,
+    attackInterval: stats.attackInterval,
+    moveSpeed: stats.moveSpeed,
+    carry: stats.carry,
+    heal: stats.heal ?? 0,
+    buildingBonus: stats.buildingBonus ?? 1,
     x: 130 + col * 35,
     y: laneYBase[entryLane] + row * 44,
     cooldownLeft: 0,
@@ -94,14 +98,14 @@ const createEnemyTurret = (index: number, balance: BalanceData): RaidActor => {
   };
 };
 
-const createEnemyHq = (target: ScoutTarget): RaidActor => ({
+const createEnemyHq = (template: EnemyTemplate): RaidActor => ({
   id: nextId('actor'),
   sourceId: 'command_center',
   label: 'Enemy HQ',
   team: 'enemy',
   kind: 'hq',
-  hp: target.recommendedPower * 3.4,
-  maxHp: target.recommendedPower * 3.4,
+  hp: template.hqHp,
+  maxHp: template.hqHp,
   atk: 0,
   def: 6,
   range: 0,
@@ -117,13 +121,7 @@ const createEnemyHq = (target: ScoutTarget): RaidActor => ({
 });
 
 const getSquadOrder = (balance: BalanceData): string[] =>
-  [...balance.units]
-    .sort((left, right) => {
-      const leftScore = left.stats.hp * 0.2 + left.stats.atk * 4 + left.stats.def * 3;
-      const rightScore = right.stats.hp * 0.2 + right.stats.atk * 4 + right.stats.def * 3;
-      return rightScore - leftScore;
-    })
-    .map((unit) => unit.id);
+  [...balance.units].map((unit) => unit.id);
 
 export const buildRaidSquad = (
   state: GameState,
@@ -132,7 +130,13 @@ export const buildRaidSquad = (
   const squad: Record<string, number> = {};
   let remaining = balance.config.raidSquadSize;
 
-  for (const unitId of getSquadOrder(balance)) {
+  const orderedUnitIds = getSquadOrder(balance).sort(
+    (left, right) =>
+      getUnitPower(right, balance, state.meta.researches) -
+      getUnitPower(left, balance, state.meta.researches)
+  );
+
+  for (const unitId of orderedUnitIds) {
     const count = state.roster[unitId] ?? 0;
     if (count <= 0) {
       continue;
@@ -169,7 +173,7 @@ export const startRaid = (
 
   for (const [unitId, count] of selectedEntries) {
     for (let amount = 0; amount < count; amount += 1) {
-      playerActors.push(createPlayerActor(unitId, actorIndex, entryLane, balance));
+      playerActors.push(createPlayerActor(unitId, actorIndex, entryLane, balance, state));
       actorIndex += 1;
     }
   }
@@ -191,7 +195,7 @@ export const startRaid = (
     enemyActors.push(createEnemyTurret(turretIndex, balance));
   }
 
-  enemyActors.push(createEnemyHq(target));
+  enemyActors.push(createEnemyHq(template));
 
   return {
     id: nextId('raid'),

@@ -3,7 +3,18 @@ import { addAssetImage, addSizedAssetImage } from '../app/assets';
 import { gameStore } from '../state/gameState';
 import { getLastRaidResolution, setLastRaidResolution } from '../state/session';
 import { createTutorialOverlay } from './TutorialOverlay';
+import { createMobileShell } from './mobileFrame';
 import { createButton, createPanel } from './ui';
+
+const formatBreakdown = (items: Record<string, number>): string => {
+  const entries = Object.entries(items);
+
+  if (entries.length === 0) {
+    return 'none';
+  }
+
+  return entries.map(([unitId, count]) => `${unitId}: ${count}`).join('\n');
+};
 
 export class ResultScene extends Phaser.Scene {
   constructor() {
@@ -11,93 +22,121 @@ export class ResultScene extends Phaser.Scene {
   }
 
   create(): void {
-    this.cameras.main.setBackgroundColor('#1b1411');
     const resolution = getLastRaidResolution();
     const battle = gameStore.getState().lastBattle;
-
-    createPanel(this, 18, 14, 1244, 56, undefined, 0x4d3323);
-    createPanel(this, 18, 82, 400, 588, 'RESULT SUMMARY', 0x8ef2d3);
-    createPanel(this, 432, 82, 830, 588, 'BATTLE REPORT', 0xd08c55);
-    addSizedAssetImage(this, 'meta_loading_art', 1024, 404, 420, 280, 0.18).setAngle(5);
-    addAssetImage(this, 'ui_icon_raid', 64, 42, 40);
-
-    this.add.text(96, 20, 'RAID RESULT', {
-      fontSize: '30px',
-      color: '#f4ddb6',
-      fontFamily: 'monospace'
+    const victory = Boolean(resolution && battle?.victory);
+    const shell = createMobileShell(this, {
+      title: 'RAID RESULT',
+      subtitle: victory ? 'LOOT SECURED' : 'RECOVERY LOOP',
+      accent: victory ? 0x8ef2d3 : 0xe39d86,
+      iconKey: 'ui_icon_raid',
+      backgroundColor: '#1b1411'
     });
+    const summaryY = shell.bodyTop;
+    const reportY = summaryY + 164;
+    const footerButtonY = shell.footerY - 10;
 
     if (resolution && battle) {
-      const bannerKey = battle.victory ? 'ui_banner_victory' : 'ui_banner_defeat';
-      addSizedAssetImage(this, bannerKey, 848, 178, 640, 170, 0.96).setDepth(1);
+      createPanel(
+        this,
+        shell.contentX,
+        summaryY,
+        shell.contentWidth,
+        156,
+        'SUMMARY',
+        victory ? 0x8ef2d3 : 0xe39d86
+      );
+      createPanel(this, shell.contentX, reportY, shell.contentWidth, 320, 'BATTLE REPORT', 0xd08c55);
+
+      addSizedAssetImage(
+        this,
+        battle.victory ? 'ui_banner_victory' : 'ui_banner_defeat',
+        shell.contentX + 272,
+        summaryY + 76,
+        150,
+        92,
+        0.96
+      );
       addSizedAssetImage(
         this,
         battle.victory ? 'building_command_center' : 'building_command_center_damaged',
-        1088,
-        256,
-        140,
-        140,
+        shell.contentX + 332,
+        summaryY + 110,
+        58,
+        58,
         0.96
-      ).setDepth(2);
+      );
 
-      addAssetImage(this, 'resource_scrap', 48, 236, 34);
-      addAssetImage(this, 'resource_power', 48, 278, 34);
-      addAssetImage(this, 'resource_core', 48, 320, 34);
+      addAssetImage(this, 'resource_scrap', shell.contentX + 30, summaryY + 102, 22);
+      addAssetImage(this, 'resource_power', shell.contentX + 30, summaryY + 126, 22);
+      addAssetImage(this, 'resource_core', shell.contentX + 30, summaryY + 150, 22);
 
       this.add.text(
-        34,
-        118,
-        `RESULT ${resolution.result.toUpperCase()}\nDURATION ${battle.durationSec}s\nTARGET ${battle.targetId}\nVICTORY ${battle.victory ? 'YES' : 'NO'}\n\nOUTCOME\n${battle.victory ? 'Base cracked. Loot secured.' : 'Raid stalled. Recover and re-arm.'}`,
+        shell.contentX + 16,
+        summaryY + 38,
+        [
+          `RESULT ${resolution.result.toUpperCase()} | ${battle.victory ? 'VICTORY' : 'DEFEAT'}`,
+          `TARGET ${battle.targetId}`,
+          `DURATION ${battle.durationSec}s`,
+          `LOOT ${battle.loot.scrap}S / ${battle.loot.power}P / ${battle.loot.core}C`
+        ].join('\n'),
         {
-          fontSize: '18px',
+          fontSize: '12px',
           color: '#f3ead9',
           fontFamily: 'monospace',
-          wordWrap: { width: 360 }
+          wordWrap: { width: 198 }
         }
       );
 
       this.add.text(
-        76,
-        224,
-        `${battle.loot.scrap}\n${battle.loot.power}\n${battle.loot.core}`,
+        shell.contentX + 16,
+        reportY + 38,
+        [
+          'SURVIVORS',
+          formatBreakdown(battle.survivors),
+          '',
+          'LOSSES',
+          formatBreakdown(battle.lost),
+          '',
+          'NEXT LOOP',
+          '1. Invest loot into base growth.',
+          '2. Refill missing units.',
+          '3. Scout a fresh target.'
+        ].join('\n'),
         {
-          fontSize: '18px',
-          color: '#9fe7f2',
-          fontFamily: 'monospace'
-        }
-      );
-
-      this.add.text(
-        450,
-        274,
-        `SURVIVORS\n${Object.entries(battle.survivors)
-          .map(([unitId, count]) => `${unitId}: ${count}`)
-          .join('\n')}\n\nLOSSES\n${Object.entries(battle.lost)
-          .map(([unitId, count]) => `${unitId}: ${count}`)
-          .join('\n')}\n\nNEXT LOOP\n1. Return to base and invest resources.\n2. Refill missing units.\n3. Scout a new target and repeat.`,
-        {
-          fontSize: '17px',
+          fontSize: '12px',
           color: '#f3ead9',
           fontFamily: 'monospace',
-          wordWrap: { width: 760 }
+          wordWrap: { width: 356 }
         }
       );
     } else {
-      this.add.text(34, 118, 'No battle data available.', {
-        fontSize: '18px',
+      createPanel(this, shell.contentX, summaryY, shell.contentWidth, 420, 'SUMMARY', 0xe39d86);
+      this.add.text(shell.contentX + 16, summaryY + 38, 'No raid data available.\nReturn to base and launch a raid first.', {
+        fontSize: '14px',
         color: '#f3ead9',
-        fontFamily: 'monospace'
+        fontFamily: 'monospace',
+        wordWrap: { width: 356 }
       });
     }
 
-    createButton(this, 24, 620, 170, 50, 'Back To Base', () => {
+    createButton(this, shell.contentX + 104, footerButtonY, 160, 28, 'Back To Base', () => {
       setLastRaidResolution(null);
       this.scene.start('BaseScene');
     });
-    createButton(this, 208, 620, 170, 50, 'Scout Again', () => {
-      setLastRaidResolution(null);
-      this.scene.start('ScoutScene');
-    }, 0x27424b);
+    createButton(
+      this,
+      shell.contentX + 284,
+      footerButtonY,
+      160,
+      28,
+      'Scout Again',
+      () => {
+        setLastRaidResolution(null);
+        this.scene.start('ScoutScene');
+      },
+      0x27424b
+    );
 
     createTutorialOverlay(this, 'ResultScene');
   }

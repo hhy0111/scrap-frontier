@@ -13,7 +13,8 @@ const getDefensePower = (state: GameState, balance: BalanceData): number => {
   }, 0);
 
   const unitPower = Object.entries(state.roster).reduce(
-    (total, [unitId, count]) => total + getUnitPower(unitId, balance) * count * 0.65,
+    (total, [unitId, count]) =>
+      total + getUnitPower(unitId, balance, state.meta.researches) * count * 0.65,
     0
   );
 

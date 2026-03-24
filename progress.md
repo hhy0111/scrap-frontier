@@ -1,0 +1,1040 @@
+Original prompt: 현재 소스와 문서 기준으로 진행상황 파악해주고, 어떤작업이 남았는지 정리해줘.
+
+- 2026-03-21: Repository cloned and status/doc audit completed.
+- 2026-03-21: Added `ShopScene` and connected previously unused shop/store assets.
+- 2026-03-21: Expanded enemy templates to zone1-3 for 12 total targets and surfaced defender/turret counts in scout UI.
+- 2026-03-21: Added barracks/garage research tracks, state persistence, research upgrade actions, and applied research to player raid/counterattack power.
+- 2026-03-21: Reworked `BaseScene`, `ScoutScene`, `RaidPrepScene`, `ResultScene`, and `ShopScene` into a centered portrait-shell layout inside the existing 1280x720 canvas.
+- 2026-03-21: Added `render_game_to_text`, async `advanceTime`, `?scene=` boot routing, and `preserveDrawingBuffer` to support Playwright-based visual checks.
+- 2026-03-21: Automated verification passed again after the UI refactor (`npm test`, `npm run build`).
+- 2026-03-21: Visual validation succeeded for `BaseScene` via Playwright screenshot (`output/web-game/base-headed-2/shot-0.png`). Additional scene captures were attempted, but the local server + browser timing was inconsistent in this environment.
+- 2026-03-21: Replaced the placeholder shop with a functional mock monetization flow.
+  - Added persistent store state for one-time offers, monthly pass, ad-free mode, rewarded placements, and daily monthly supply.
+  - `ShopScene` now applies real in-game effects instead of placeholder buttons.
+  - Added direct store state output to `window.render_game_to_text`.
+- 2026-03-21: Reworked `RaidScene` into the portrait-shell layout used by the other meta scenes.
+  - Battlefield rendering now scales from the old wide combat coordinate space into the centered portrait frame.
+  - Added direct debug raid boot support for `?scene=RaidScene` when no in-memory raid is active.
+  - Added `activeRaid` summary to `window.render_game_to_text`.
+- 2026-03-21: Added unlock UX helpers and surfaced them in `BaseScene`.
+  - `BaseScene` now shows a current lock hint in the command panel and the next HQ milestone in the daily-ops column.
+  - Added reusable unlock milestone/status helpers in `src/domain/meta/unlocks.ts`.
+  - Added unlock summary data to `window.render_game_to_text`.
+- 2026-03-21: Verification status after the raid UI refactor:
+  - `npx tsc --noEmit` passed.
+  - `npm test` passed: 4 files / 18 tests.
+  - `npm run build` passed.
+  - Visual validation passed for `RaidScene` in a headed browser after two follow-up fixes:
+    - sprite sizing no longer resets to raw texture size
+    - `render_game_to_text` raid state now stays in sync with the live scene
+  - Latest verified raid artifact: `output/web-game/raid-direct-headed-2/shot-0.png`
+  - Added a favicon link in `index.html`; the prior browser console 404 is gone.
+
+TODO
+- Decide whether the centered portrait shell remains the shipping UI, or whether the actual canvas should move to portrait dimensions later.
+- Continue remaining MVP work after UI flow stabilization: real ad/IAP platform hooks, richer zone progression, and Android packaging.
+- Consider extending the unlock roadmap beyond `BaseScene` into `ScoutScene` / `RaidPrepScene` if the player should see zone unlock pacing outside the base.
+- 2026-03-21: Completed the next 1-5 work batch in a single pass.
+  - The game config now uses a real portrait viewport (`432x768`) instead of rendering a portrait shell inside `1280x720`.
+  - Rebuilt `mobileFrame.ts` to derive layout metrics from the live canvas size, and updated footer/button placement in the portrait scenes to use the shared frame metrics.
+  - Added `src/platform/commerce.ts` as a real platform adapter boundary:
+    - auto-detects `window.ScrapFrontierNativeCommerce`
+    - exposes purchase/rewarded capabilities
+    - falls back to delayed web-mock success when no native bridge exists
+  - Extended `ShopScene` to use the platform adapter asynchronously and surface provider/busy/action status in the UI.
+  - Extended unlock pacing hints into `ScoutScene` and `RaidPrepScene`, not only `BaseScene`.
+  - Reworked scout target generation to better track current progression:
+    - estimates actual auto-raid power from the current roster
+    - biases selection toward the highest unlocked zone tier
+    - uses ascending power bands for the 3 presented targets
+    - avoids duplicate templates when the pool allows it
+  - Updated tests for the new scout weighting and for research-aware raid setup without depending on a fixed RNG target.
+- 2026-03-21: Validation after the portrait baseline + commerce adapter + scout rebalance update:
+  - `npx tsc --noEmit` passed
+  - `npm test` passed: 4 files / 19 tests
+  - `npm run build` passed
+  - Existing latest portrait-oriented browser artifacts that still match the current flow:
+    - `output/web-game/base-portrait-4/shot-0.png`
+    - `output/web-game/scout-portrait-1/shot-0.png`
+    - `output/web-game/raidprep-portrait-2/shot-0.png`
+    - `output/web-game/raid-direct-headed-2/shot-0.png`
+  - A fresh `ShopScene` direct recapture was attempted, but the local browser/server pairing resolved to the wrong app during one run, so the older shop screenshot should remain the trusted reference until the capture loop is normalized.
+
+TODO
+- Normalize the Playwright capture loop so `ShopScene` always resolves to this repo's build and produces a matching `state-0.json`.
+- Add a tutorial-dismiss or tutorial-skip capture flow for a cleaner `BaseScene` visual regression artifact.
+- Replace the current web-mock fallback in `src/platform/commerce.ts` with actual Capacitor/native bridge implementations.
+- Do a balancing pass on zone2/zone3 rewards and recommended power after a few longer simulated progression runs.
+- Continue Android packaging / store asset preparation after the UI and platform hooks settle.
+- 2026-03-21: Hardened the commerce/runtime verification path.
+  - Added `scripts/capture-scene.mjs` and `npm run capture:scene` to serve `dist` on an isolated random port, invoke the bundled Playwright client, and fail if `state-0.json` does not report:
+    - `app.id === "scrap-frontier"`
+    - the expected scene key
+  - Added `app.id/title/viewport` to `window.render_game_to_text` so capture runs can validate they hit this repo's build.
+  - Added `BootScene` query support for `?tutorial=off` so clean base captures do not require a manual tutorial dismissal.
+- 2026-03-21: Hardened the commerce adapter beyond the initial mock/native split.
+  - `src/platform/commerce.ts` now detects both:
+    - `window.ScrapFrontierNativeCommerce`
+    - `window.Capacitor.Plugins.ScrapFrontierCommerce`
+  - Native bridges that are present but missing `purchaseOffer` or `showRewardedPlacement` no longer silently succeed via web mock; they now return an explicit native-unavailable failure.
+  - Added URL-driven debug commerce modes:
+    - `?commerce=native-mock`
+    - `?commerce=native-no-purchases`
+    - `?commerce=native-no-rewarded`
+  - `ShopScene` now reflects capability loss in the UI (`IAP OFFLINE`, rewarded unavailable, provider source labels).
+- 2026-03-21: Added commerce adapter tests in `tests/commerce.test.ts`.
+  - web mock fallback
+  - Capacitor plugin path
+  - URL-installed native debug bridge
+- 2026-03-21: Validation after the capture/commerce hardening pass:
+  - `npx tsc --noEmit` passed
+  - `npm test` passed: 5 files / 22 tests
+  - `npm run build` passed
+  - New deterministic artifacts:
+    - `output/web-game/base-clean-2/shot-0.png`
+    - `output/web-game/base-clean-2/state-0.json`
+    - `output/web-game/shop-clean-1/shot-0.png`
+    - `output/web-game/shop-clean-1/state-0.json`
+    - `output/web-game/shop-native-mock-1/shot-0.png`
+    - `output/web-game/shop-native-mock-1/state-0.json`
+
+TODO
+- Replace the debug/native-mock commerce bridge with real Capacitor plugin implementations and bridge method names from the mobile shell.
+- Extend the deterministic capture loop to `ScoutScene`, `RaidPrepScene`, and `RaidScene` through the new `scripts/capture-scene.mjs` command.
+- Do a longer balance pass on zone2/zone3 targets now that the capture loop is stable and the commerce/debug hooks are in place.
+- Continue Android packaging / store asset preparation after the platform bridge contract is finalized.
+- 2026-03-21: Extended the capture loop from one-off scene checks into a reusable batch flow.
+  - Added `scripts/capture-core-scenes.mjs`.
+  - Added `npm run capture:core-scenes`.
+  - The batch script can also resume from a failed point with:
+    - `--from <SceneKey>`
+    - `--only <SceneKey>`
+  - `RaidScene` needed a shorter dedicated action profile, so `playwright-actions/raid-preview.json` was added and wired into the batch flow.
+- 2026-03-21: Regenerated deterministic "latest" artifacts for the main portrait scenes.
+  - `output/web-game/base-clean-latest`
+  - `output/web-game/scout-clean-latest`
+  - `output/web-game/raidprep-clean-latest`
+  - `output/web-game/raid-clean-latest`
+  - `output/web-game/shop-clean-latest`
+  - `output/web-game/shop-native-mock-latest`
+  - Each of the above now has a matching `state-0.json` with:
+    - `app.id = "scrap-frontier"`
+    - the expected scene key
+- 2026-03-21: Added an additional scout-balance regression check.
+  - `tests/ai.test.ts` now verifies that average recommended power and average rewards both increase across zone1 -> zone2 -> zone3 progression states.
+- 2026-03-21: Validation after the batch-capture + balance-regression pass:
+  - `npx tsc --noEmit` passed
+  - `npm test` passed: 5 files / 23 tests
+  - `npm run build` passed
+  - `RaidScene` batch capture initially overran into `ResultScene`; fixed by shortening the dedicated capture action timing and re-running the remaining batch successfully.
+
+TODO
+- Replace the debug/native-mock commerce bridge with real Capacitor plugin implementations and final mobile bridge method names.
+- Decide whether to add negative-case commerce artifacts as well (`native-no-purchases`, `native-no-rewarded`) for UI regression coverage.
+- Do a deeper zone2/zone3 balance tuning pass beyond the new monotonic regression test.
+- Continue Android packaging / store asset preparation after the platform bridge contract is finalized.
+- 2026-03-21: Finalized the commerce bridge contract constants in code.
+  - Added `src/platform/commerceContract.ts`.
+  - Centralized:
+    - window bridge name
+    - Capacitor plugin name
+    - supported debug commerce modes
+- 2026-03-21: Added negative-case shop capture artifacts for commerce capability regression coverage.
+  - `output/web-game/shop-native-no-purchases-latest`
+  - `output/web-game/shop-native-no-rewarded-latest`
+  - Verified states:
+    - `shop-native-no-purchases-latest/state-0.json` -> `commerce.purchases = false`
+    - `shop-native-no-rewarded-latest/state-0.json` -> `commerce.rewardedAds = false`
+- 2026-03-21: Final verification after the commerce contract cleanup:
+  - `npm test` passed: 5 files / 23 tests
+  - `npm run build` passed
+
+TODO
+- Replace the debug/native-mock commerce bridge with real Capacitor plugin implementations and final mobile bridge method names.
+- Decide whether to fold the two new negative-case shop captures into `capture-core-scenes` by default or keep them as targeted/manual verification artifacts.
+- Do a deeper zone2/zone3 balance tuning pass beyond the new monotonic regression test.
+- Continue Android packaging / store asset preparation after the platform bridge contract is finalized.
+- 2026-03-21: Added the next layer of mobile-release scaffolding.
+  - Added `src/app/appMeta.ts` for shared app metadata:
+    - slug
+    - title
+    - package id
+    - manifest path
+    - privacy policy path
+  - Added `capacitor.config.ts` with the current mobile package configuration.
+  - Added `public/manifest.webmanifest`.
+  - Added `public/privacy-policy.html`.
+- 2026-03-21: Added a real Capacitor-to-window commerce adapter.
+  - Added `src/platform/capacitorCommerceBridge.ts`.
+  - App startup now installs a `Capacitor.Plugins.ScrapFrontierCommerce` wrapper into the existing window bridge when available.
+  - The adapter maps:
+    - `purchaseOffer({ offerId })`
+    - `showRewardedPlacement({ placementId })`
+    - `restorePurchases()`
+    - `getDiagnostics()`
+- 2026-03-21: Added restore-purchases flow to the game layer.
+  - Added `restorePurchasesThroughPlatform()` in `src/platform/commerce.ts`.
+  - Added `restoreStorePurchases()` in `src/domain/meta/store.ts`.
+  - Added `gameStore.restoreStorePurchases()` in `src/state/gameState.ts`.
+  - `ShopScene` now has a `Restore` button and no longer labels the store as mock-only.
+- 2026-03-21: Added native handoff documentation in `MOBILE_BRIDGE.md`.
+  - Documents plugin name, bridge name, expected method payloads, and restore semantics.
+- 2026-03-21: Validation after the mobile bridge + restore pass:
+  - `npx tsc --noEmit` passed
+  - `npm test` passed: 5 files / 24 tests
+  - `npm run build` passed
+  - Fresh shop artifacts after the change:
+    - `output/web-game/shop-restore-latest/state-0.json`
+    - `output/web-game/shop-restore-native-no-purchases/state-0.json`
+  - The updated text-state payload now includes:
+    - `app.packageId = "com.hhy0111.scrapfrontier"`
+    - `app.privacyPolicyPath = "/privacy-policy.html"`
+
+TODO
+- Implement the real Capacitor plugin behind `ScrapFrontierCommerce` using the contract in `MOBILE_BRIDGE.md`.
+- Decide whether `restore` should have dedicated capture coverage inside `capture-core-scenes`, or remain a targeted shop-only verification path.
+- Do a deeper zone2/zone3 balance tuning pass beyond the monotonic regression tests.
+- Continue Android packaging and store asset preparation with the new `capacitor.config.ts` baseline.
+- 2026-03-21: Hardened the deterministic capture loop again after the restore-flow integration.
+  - `scripts/capture-scene.mjs` now supports:
+    - `--shop-action`
+    - `--raid-debug`
+    - `--expect-owned-offers`
+    - `--expect-ads-disabled`
+  - The capture runner now clears prior artifacts before each run, fails if `errors-0.json` is emitted, and force-closes Windows browser child trees so capture commands exit cleanly.
+  - Added restore-owned verification directly into `scripts/capture-core-scenes.mjs`:
+    - `output/web-game/shop-restore-owned-latest`
+    - expected state:
+      - owned `starter_pack`
+      - owned `commander_pack`
+      - owned `monthly_pass`
+      - `adsDisabled = true`
+- 2026-03-21: Stabilized `RaidScene` browser capture with a scene-level debug hold.
+  - `RaidScene` now supports `?raidDebug=hold`.
+  - `capture-core-scenes.mjs` uses that hook for the deterministic raid artifact so the batch no longer depends on a narrow timing window between `RaidScene` and `ResultScene`.
+  - Updated raid preview timing:
+    - `playwright-actions/raid-preview.json`
+    - raid capture pause increased in the batch scenario.
+- 2026-03-21: Validation after the capture-loop hardening pass:
+  - `npx tsc --noEmit` passed
+  - `npm test` passed: 5 files / 24 tests
+  - `npm run build` passed
+  - Fresh verified artifacts:
+    - `output/web-game/raid-clean-latest/state-0.json` -> `scene = "RaidScene"`
+    - `output/web-game/shop-clean-latest/state-0.json` -> `scene = "ShopScene"`
+    - `output/web-game/shop-native-mock-latest/state-0.json` -> `commerce.provider = "native-bridge"`
+    - `output/web-game/shop-restore-owned-latest/state-0.json` -> restored purchases + `adsDisabled = true`
+
+TODO
+- Implement the real Capacitor plugin behind `ScrapFrontierCommerce` using the contract in `MOBILE_BRIDGE.md`.
+- Decide whether the negative commerce-capability captures (`native-no-purchases`, `native-no-rewarded`) should also be folded into the default batch, or remain targeted artifacts.
+- Do a deeper zone2/zone3 balance tuning pass beyond the monotonic regression tests.
+- Continue Android packaging and store asset preparation with the new `capacitor.config.ts` baseline.
+- 2026-03-21: Added the first real Capacitor Android project and native commerce plugin scaffold.
+  - Installed:
+    - `@capacitor/core`
+    - `@capacitor/cli`
+    - `@capacitor/android`
+  - Added npm scripts:
+    - `cap:sync:android`
+    - `android:assemble:debug`
+  - Generated the Android platform in `android/`.
+  - Added a native plugin class:
+    - `android/app/src/main/java/com/hhy0111/scrapfrontier/ScrapFrontierCommercePlugin.java`
+  - `MainActivity.java` now registers `ScrapFrontierCommercePlugin` before bridge creation.
+  - The Android manifest now carries commerce metadata flags for:
+    - mode
+    - purchases enabled
+    - rewarded enabled
+- 2026-03-21: Added a shared Capacitor JS contract layer.
+  - Added `src/platform/capacitorCommercePlugin.ts`.
+  - `src/platform/capacitorCommerceBridge.ts` can now consume:
+    - the existing `window.Capacitor.Plugins.ScrapFrontierCommerce`
+    - or the registered Capacitor plugin proxy when available
+- 2026-03-21: Validation after the Android/Capacitor scaffold pass:
+  - `npx tsc --noEmit` passed
+  - `npm test` passed: 5 files / 24 tests
+  - `npm run build` passed
+  - `npm run cap:sync:android` passed
+  - `npm run android:assemble:debug` reached Gradle but failed on environment setup:
+    - missing Android SDK location
+    - expected fix: set `ANDROID_HOME` / `ANDROID_SDK_ROOT` or create `android/local.properties`
+  - Added setup notes in `ANDROID_SETUP.md`
+
+TODO
+- Replace the current Android `local-simulator` commerce implementation with real Play Billing / rewarded-ad SDK wiring.
+- Decide whether the negative commerce-capability captures (`native-no-purchases`, `native-no-rewarded`) should also be folded into the default batch, or remain targeted artifacts.
+- Do a deeper zone2/zone3 balance tuning pass beyond the monotonic regression tests.
+- Configure Android SDK locally and rerun `npm run android:assemble:debug`.
+- 2026-03-21: Folded negative commerce-capability captures into the default shop batch.
+  - `scripts/capture-scene.mjs` now supports:
+    - `--expect-commerce-purchases`
+    - `--expect-commerce-rewarded-ads`
+  - `scripts/capture-core-scenes.mjs` now includes:
+    - `shop-native-no-purchases-latest`
+    - `shop-native-no-rewarded-latest`
+  - Verified fresh states:
+    - `shop-native-no-purchases-latest/state-0.json` -> `commerce.purchases = false`
+    - `shop-native-no-rewarded-latest/state-0.json` -> `commerce.rewardedAds = false`
+- 2026-03-21: Fixed a web-only Capacitor bridge regression.
+  - The newly registered Capacitor proxy was being misread as a real native plugin during browser captures.
+  - `src/platform/capacitorCommerceBridge.ts` now ignores the unimplemented web proxy unless:
+    - the runtime is actually native
+    - or the plugin object has a concrete implementation surface
+  - Added a regression test in `tests/commerce.test.ts`.
+- 2026-03-21: Re-tuned zone2/zone3 scouting and raid difficulty.
+  - `src/domain/raid/startRaid.ts`
+    - enemy HQ HP is now sourced from the enemy template instead of scaling from `recommendedPower`
+  - `src/domain/ai/generateScoutTargets.ts`
+    - reduced highest-zone overweighting
+    - tightened power-gap weighting
+    - lowered recommended-power inflation
+    - slightly adjusted target power bands
+    - exported `getAutoRaidPower()` for regression coverage
+  - Added a stronger balance regression in `tests/ai.test.ts`:
+    - the lowest unlocked target stays closer to the current auto-raid power
+    - the highest target still stays meaningfully harder
+- 2026-03-21: Validation after the shop-batch + balance tuning pass:
+  - `npx tsc --noEmit` passed
+  - `npm test` passed: 5 files / 26 tests
+  - `npm run build` passed
+  - Refreshed shop artifacts:
+    - `output/web-game/shop-clean-latest`
+    - `output/web-game/shop-native-mock-latest`
+    - `output/web-game/shop-native-no-purchases-latest`
+    - `output/web-game/shop-native-no-rewarded-latest`
+    - `output/web-game/shop-restore-owned-latest`
+  - Visual spot-checks confirmed:
+    - `IAP Offline` buttons appear in the no-purchases scenario
+    - rewarded buttons show `Unavailable` in the no-rewarded scenario
+
+TODO
+- Replace the current Android `local-simulator` commerce implementation with real Play Billing / rewarded-ad SDK wiring.
+- Configure Android SDK locally and rerun `npm run android:assemble:debug`.
+- Do a deeper long-run economy pass beyond the new scout/raid difficulty regression checks.
+- Continue Android packaging and store asset preparation.
+- 2026-03-21: Added and stabilized deterministic progression-route regression coverage.
+  - The longer-run simulation path now mirrors real daily mission progress for:
+    - `build_any`
+    - `train_unit`
+    - `raid_win`
+  - Added `tests/progression.test.ts` to verify two concrete routes:
+    - early route reaches HQ2 with expanded production and a stronger infantry squad
+    - longer route reaches HQ3, finishes a garage, and starts mech growth
+  - The simulated route no longer double-builds `garage` while the first copy is still under construction.
+  - Tuned early core pacing so the first HQ3 / garage transition is reachable sooner:
+    - `src/domain/base/levelUpHq.ts`
+      - HQ3 core cost reduced from `48` to `40`
+    - `src/domain/meta/research.ts`
+      - garage research base core cost reduced from `22` to `16`
+- 2026-03-21: Validation after the progression-route + early core-curve pass:
+  - `npx tsc --noEmit` passed
+  - `npm test` passed: 6 files / 28 tests
+  - `npm run build` passed
+  - Refreshed a browser sanity artifact after the progression/balance update:
+    - `output/web-game/base-clean-latest/shot-0.png`
+    - `output/web-game/base-clean-latest/state-0.json`
+  - Verified state expectation:
+    - `base-clean-latest/state-0.json` -> `scene = "BaseScene"` and `app.id = "scrap-frontier"`
+
+TODO
+- Replace the current Android `local-simulator` commerce implementation with real Play Billing / rewarded-ad SDK wiring.
+- Configure Android SDK locally and rerun `npm run android:assemble:debug`.
+- Extend the new progression simulation beyond the first-hour route into a longer economy curve that reaches reliable zone2 / zone3 play.
+- Continue Android packaging and store asset preparation.
+- 2026-03-21: Extended the progression regression from the first-hour route into a deterministic late-zone2 baseline.
+  - `tests/progression.test.ts` now verifies a third milestone:
+    - a three-hour route maintains a zone2-ready mech economy
+  - The late route checks for:
+    - sustained raid wins
+    - garage research online
+    - 4+ mech units
+    - at least 2 turrets
+    - zone2 scout targets still present at route end
+  - Progression route parity was tightened again:
+    - HQ level-ups now refresh scout targets immediately
+    - research upgrades now refresh scout targets immediately
+- 2026-03-21: Fixed a cold-start capture race in `scripts/capture-scene.mjs`.
+  - Default `pauseMs` increased from `200` to `400`
+  - This removes the intermittent `scene = null` failure on fresh `BaseScene` captures
+- 2026-03-21: Validation after the late-zone2 progression + capture timing pass:
+  - `npx tsc --noEmit` passed
+  - `npm test` passed: 6 files / 29 tests
+  - `npm run build` passed
+  - Refreshed deterministic artifact:
+    - `output/web-game/base-clean-latest/shot-0.png`
+    - `output/web-game/base-clean-latest/state-0.json`
+  - Verified state expectation:
+    - `base-clean-latest/state-0.json` -> `scene = "BaseScene"`
+
+TODO
+- Replace the current Android `local-simulator` commerce implementation with real Play Billing / rewarded-ad SDK wiring.
+- Configure Android SDK locally and rerun `npm run android:assemble:debug`.
+- Extend the progression simulation again from the late-zone2 baseline into a route that can deterministically reach HQ4 / zone3.
+- Continue Android packaging and store asset preparation.
+- 2026-03-21: Extended the long-run progression regression from the late-zone2 baseline into an HQ4 / zone3 milestone.
+  - `tests/progression.test.ts` now verifies a fourth milestone:
+    - a three-hour route reaches HQ4 and unlocks zone3 scouting
+  - The simulated route was made more active after HQ3:
+    - raid cadence tightens from every 4 minutes to every 3 minutes
+    - safe-target threshold increases slightly for the late-game route
+  - HQ4 pacing was softened to match the new route:
+    - `src/domain/base/levelUpHq.ts`
+      - HQ4 core cost reduced from `90` to `65`
+- 2026-03-21: Validation after the HQ4 / zone3 progression pass:
+  - `npx tsc --noEmit` passed
+  - `npm test` passed: 6 files / 30 tests
+  - `npm run build` passed
+  - Refreshed deterministic artifact:
+    - `output/web-game/base-clean-latest/shot-0.png`
+    - `output/web-game/base-clean-latest/state-0.json`
+  - Verified state expectation:
+    - `base-clean-latest/state-0.json` -> `scene = "BaseScene"`
+
+TODO
+- Replace the current Android `local-simulator` commerce implementation with real Play Billing / rewarded-ad SDK wiring.
+- Configure Android SDK locally and rerun `npm run android:assemble:debug`.
+- Revisit the new HQ4 / zone3 curve with a longer zone3 combat/economy regression so the path is not only unlocked, but also stable after unlock.
+- Continue Android packaging and store asset preparation.
+- 2026-03-22: Extended the HQ4 / zone3 route into a post-unlock stability regression.
+  - `tests/progression.test.ts` now verifies a fifth milestone:
+    - a five-hour route stabilizes a researched zone3 raid economy
+  - The long-run simulated route now keeps the mech path tighter after HQ4:
+    - `garage` research level 2 is prioritized before `barracks` research level 1
+  - The five-hour regression uses an explicit per-test timeout because it intentionally simulates a much longer route.
+- 2026-03-22: Validation after the zone3 post-unlock stability pass:
+  - `npx tsc --noEmit` passed
+  - `npm test` passed: 6 files / 31 tests
+  - `npm run build` passed
+  - Refreshed deterministic artifact:
+    - `output/web-game/base-clean-latest/shot-0.png`
+    - `output/web-game/base-clean-latest/state-0.json`
+  - Verified state expectation:
+    - `base-clean-latest/state-0.json` -> `scene = "BaseScene"`
+
+TODO
+- Replace the current Android `local-simulator` commerce implementation with real Play Billing / rewarded-ad SDK wiring.
+- Configure Android SDK locally and rerun `npm run android:assemble:debug`.
+- Turn the new five-hour zone3 stability route into a richer late-game regression with explicit zone3 target quality / fight sustainability checks.
+- Continue Android packaging and store asset preparation.
+- 2026-03-22: Tightened late-game zone3 target quality and post-unlock sustainability.
+  - `tests/progression.test.ts` now checks more than unlock timing:
+    - the five-hour route samples multiple late-game scout refreshes
+    - at least one sampled zone3 target must be actually winnable in simulation
+  - `src/domain/ai/generateScoutTargets.ts` now guarantees that the current highest unlocked zone appears in the offered targets by the final slot if it has not shown up earlier.
+  - `src/data/balance/enemyTemplates.json`
+    - softened `zone3_easy_a` as the intended first zone3 entry target
+      - fewer turrets
+      - lower HQ HP
+      - lighter defender mix
+  - `src/domain/base/levelUpHq.ts`
+    - HQ4 core cost reduced again from `65` to `55`
+- 2026-03-22: Validation after the zone3 target-quality pass:
+  - `npx tsc --noEmit` passed
+  - `npm test` passed: 6 files / 31 tests
+  - `npm run build` passed
+  - Refreshed deterministic artifact:
+    - `output/web-game/base-clean-latest/shot-0.png`
+    - `output/web-game/base-clean-latest/state-0.json`
+  - Verified state expectation:
+    - `base-clean-latest/state-0.json` -> `scene = "BaseScene"`
+
+TODO
+- Replace the current Android `local-simulator` commerce implementation with real Play Billing / rewarded-ad SDK wiring.
+- Configure Android SDK locally and rerun `npm run android:assemble:debug`.
+- Extend the new zone3 sustainability regression into more explicit late-game checks such as survivor counts, loot quality, or repeated zone3 wins in sequence.
+- Continue Android packaging and store asset preparation.
+- 2026-03-22: Strengthened the zone3 late-game regression from a single winnable fight into measurable fight quality.
+  - `tests/progression.test.ts` now verifies for the five-hour route:
+    - multiple sampled zone3 scout refreshes
+    - at least 2 sampled zone3 victories
+    - at least one victory with 3+ survivors
+    - at least one victory with meaningful loot value
+    - the chosen late-game victory returns at least `2 core`
+  - Added explicit per-test timeouts for the heavier 3-hour / 5-hour progression regressions to avoid false negatives from Vitest defaults.
+- 2026-03-22: Further tuned the zone3 entry layer.
+  - `src/domain/ai/generateScoutTargets.ts`
+    - the final slot now guarantees the highest unlocked zone appears if it has not appeared earlier
+  - `src/data/balance/enemyTemplates.json`
+    - `zone3_easy_a` remains the intended first zone3 bridge encounter and has been softened accordingly
+- 2026-03-22: Validation after the stronger zone3 fight-quality pass:
+  - `npx tsc --noEmit` passed
+  - `npm test` passed: 6 files / 31 tests
+  - `npm run build` passed
+  - Refreshed deterministic artifact:
+    - `output/web-game/base-clean-latest/shot-0.png`
+    - `output/web-game/base-clean-latest/state-0.json`
+  - Verified state expectation:
+    - `base-clean-latest/state-0.json` -> `scene = "BaseScene"`
+
+TODO
+- Replace the current Android `local-simulator` commerce implementation with real Play Billing / rewarded-ad SDK wiring.
+- Configure Android SDK locally and rerun `npm run android:assemble:debug`.
+- Extend late-game regression beyond repeated wins into counter-attack pressure or longer post-raid economy recovery checks.
+- Continue Android packaging and store asset preparation.
+- 2026-03-22: Added repeated zone3-win coverage with losses applied back into progression state.
+  - `tests/progression.test.ts`
+    - added a sixth progression milestone:
+      - after the five-hour route, the simulation can continue taking zone3 raids while feeding unit losses back into roster state
+    - the repeated late-game check now:
+      - allows recovery time between raids instead of forcing unsafe back-to-back pulls
+      - requires at least 2 zone3 victories across the late-game follow-up window
+      - requires at least one later victory after earlier raid losses
+      - keeps survivor / loot thresholds on the successful follow-up wins
+  - Added a reusable zone-tier target picker in the test harness so the repeated late-game route can explicitly choose safe zone3 targets without regressing earlier progression coverage.
+- 2026-03-22: Validation after repeated zone3-win regression:
+  - `npx vitest run tests/progression.test.ts --reporter=verbose` passed
+    - 6 progression tests passed
+  - `npm test` passed
+    - 6 files / 32 tests
+  - `npm run build` passed
+  - Refreshed deterministic artifact:
+    - `output/web-game/base-clean-latest/shot-0.png`
+    - `output/web-game/base-clean-latest/state-0.json`
+  - Verified state expectation:
+    - `base-clean-latest/state-0.json` -> `scene = "BaseScene"`
+  - Note:
+    - `npm run capture:scene` hit a command timeout on shutdown, but the refreshed screenshot and state dump were written successfully before exit.
+
+TODO
+- Replace the current Android `local-simulator` commerce implementation with real Play Billing / rewarded-ad SDK wiring.
+- Configure Android SDK locally and rerun `npm run android:assemble:debug`.
+- Extend late-game regression into counter-attack pressure or longer post-raid economy recovery checks beyond the new repeated zone3 wins.
+- Continue Android packaging and store asset preparation.
+- 2026-03-22: Added late-game counter-attack recovery coverage on top of the repeated zone3 route.
+  - `tests/progression.test.ts`
+    - extracted a reusable `continueProgressionRoute(...)` helper so long-run tests can keep using the same build/train/raid loop from arbitrary late-game states
+    - added a seventh progression milestone:
+      - after the five-hour route, the test pushes threat near the counter-attack threshold
+      - a real zone3 victory triggers the counter-attack
+      - the state then runs a 45-minute recovery route
+      - the recovered state must still reopen safe zone3 wins
+  - The new regression verifies:
+    - counter-attack pressure is actually reached and resolved
+    - the late-game route still maintains HQ4 / zone3 progression after the pressure event
+    - at least one post-pressure zone3 sample is still winnable with meaningful survivors and core loot
+- 2026-03-22: Validation after counter-attack recovery regression:
+  - `npx vitest run tests/progression.test.ts --reporter=verbose` passed
+    - 7 progression tests passed
+  - `npm test` passed
+    - 6 files / 33 tests
+  - `npm run build` passed
+  - Refreshed deterministic artifact:
+    - `output/web-game/base-clean-latest/shot-0.png`
+    - `output/web-game/base-clean-latest/state-0.json`
+  - Verified state expectation:
+    - `base-clean-latest/state-0.json` -> `scene = "BaseScene"`
+  - Note:
+    - the first parallel verification batch timed out due Windows child-process shutdown, so `npm` verification was rerun sequentially via `cmd /c`.
+
+TODO
+- Replace the current Android `local-simulator` commerce implementation with real Play Billing / rewarded-ad SDK wiring.
+- Configure Android SDK locally and rerun `npm run android:assemble:debug`.
+- Extend late-game regression beyond counter-attack recovery into longer post-pressure economy checks or repeated counter-attack cycles.
+- Continue Android packaging and store asset preparation.
+- 2026-03-22: Extended late-game coverage into repeated counter-attack cycles.
+  - `tests/progression.test.ts`
+    - added `resolvePendingCounterAttackObserved(...)` and `continueObservedProgressionRoute(...)`
+      - the test harness can now count how many counter-attacks were actually resolved during a long route
+    - added an eighth progression milestone:
+      - after the five-hour route, a further two-hour late-game route runs with elevated threat pressure
+      - the route must survive repeated counter-attack cycles
+      - zone3 must still remain viable after those cycles
+  - The new long-run regression verifies:
+    - at least 2 counter-attacks are resolved during the extension window
+    - the extended late-game route still keeps HQ4 / zone3 progression intact
+    - post-cycle zone3 samples still include at least one deterministic victory with meaningful survivors and core loot
+- 2026-03-22: Validation after repeated counter-attack-cycle regression:
+  - `npx vitest run tests/progression.test.ts --reporter=verbose` passed
+    - 8 progression tests passed
+  - `npm test` passed
+    - 6 files / 34 tests
+  - `npm run build` passed
+  - `npm run capture:scene -- --scene BaseScene --tutorial off --output-dir output/web-game/base-clean-latest` passed
+  - Refreshed deterministic artifact:
+    - `output/web-game/base-clean-latest/shot-0.png`
+    - `output/web-game/base-clean-latest/state-0.json`
+  - Verified state expectation:
+    - `base-clean-latest/state-0.json` -> `scene = "BaseScene"`
+
+TODO
+- Replace the current Android `local-simulator` commerce implementation with real Play Billing / rewarded-ad SDK wiring.
+- Configure Android SDK locally and rerun `npm run android:assemble:debug`.
+- Extend late-game regression into even longer 8h+ economy pressure or explicit counter-attack defeat/recovery cases.
+- Continue Android packaging and store asset preparation.
+- 2026-03-22: Extended late-game coverage into an eight-hour economy pressure route.
+  - `tests/progression.test.ts`
+    - added a ninth progression milestone:
+      - after the five-hour route, the test runs a further three-hour extension under elevated threat pressure
+      - repeated counter-attack cycles must resolve without collapsing zone3 viability
+      - late-game zone3 samples must still yield profitable deterministic wins
+    - added a progression-route cache for the 180-minute and 300-minute fixtures
+      - this removed duplicate long-route recomputation across the heavier regression tests
+      - the Vitest worker timeout seen during the first 8-hour pass is no longer reproduced
+  - The new long-run regression verifies:
+    - at least 4 counter-attacks are resolved during the extension window
+    - the eight-hour route still keeps HQ4 / zone3 progression intact
+    - the final late-game state retains meaningful mech power and core-positive zone3 wins
+- 2026-03-22: Validation after eight-hour pressure regression:
+  - `npx vitest run tests/progression.test.ts --reporter=verbose` passed
+    - 9 progression tests passed
+  - `npm test` passed
+    - 6 files / 35 tests
+  - `npm run build` passed
+  - `npm run capture:scene -- --scene BaseScene --tutorial off --output-dir output/web-game/base-clean-latest` passed
+  - Refreshed deterministic artifact:
+    - `output/web-game/base-clean-latest/shot-0.png`
+    - `output/web-game/base-clean-latest/state-0.json`
+  - Verified state expectation:
+    - `base-clean-latest/state-0.json` -> `scene = "BaseScene"`
+  - Note:
+    - the first capture attempt failed because it was launched in parallel before `dist/index.html` existed; rerunning after the build completed resolved it.
+
+TODO
+- Replace the current Android `local-simulator` commerce implementation with real Play Billing / rewarded-ad SDK wiring.
+- Configure Android SDK locally and rerun `npm run android:assemble:debug`.
+- Add explicit counter-attack defeat/recovery regression coverage now that the 8h+ victory-side pressure path is stable.
+- Continue Android packaging and store asset preparation.
+- 2026-03-22: Added an explicit counter-attack defeat-and-recovery regression.
+  - `tests/progression.test.ts`
+    - added a tenth progression milestone:
+      - start from the five-hour late-game state
+      - intentionally weaken the defending roster and remove turrets to force a real counter-attack defeat
+      - run a long recovery route afterward
+    - the defeat-side regression now verifies:
+      - the counter-attack actually resolves as a defeat with real scrap/power loss
+      - HQ4 / zone3 progression survives the setback
+      - the recovered state returns to meaningful `zone3` scouting pressure
+      - sampled post-recovery zone3 targets again show partial survivability and reachable recommendation bands
+  - Important boundary:
+    - the current game logic does not yet guarantee a post-defeat return to actual deterministic zone3 wins
+    - the new regression intentionally freezes the current reachable boundary at `zone3 scouting pressure`, not full post-defeat zone3 victory
+- 2026-03-22: Validation after explicit defeat-recovery regression:
+  - `npx vitest run tests/progression.test.ts --reporter=verbose` passed
+    - 10 progression tests passed
+  - `npm test` passed
+    - 6 files / 36 tests
+  - `npm run build` passed
+  - `npm run capture:scene -- --scene BaseScene --tutorial off --output-dir output/web-game/base-clean-latest` completed and refreshed the artifact
+  - Refreshed deterministic artifact:
+    - `output/web-game/base-clean-latest/shot-0.png`
+    - `output/web-game/base-clean-latest/state-0.json`
+  - Verified state expectation:
+    - `base-clean-latest/state-0.json` -> `scene = "BaseScene"`
+  - Note:
+    - parallel verification still times out on Windows child-process shutdown; final verification was rerun sequentially for reliable exit codes.
+
+TODO
+- Replace the current Android `local-simulator` commerce implementation with real Play Billing / rewarded-ad SDK wiring.
+- Configure Android SDK locally and rerun `npm run android:assemble:debug`.
+- Extend defeat-side recovery from a single recovered win into repeated post-defeat zone3 win sequences.
+- Continue Android packaging and store asset preparation.
+- 2026-03-24: Added lobby banner-ad support across the web shell, Android bridge, and release docs.
+  - Web/game layer:
+    - `src/types/game.ts`
+      - added `BannerPlacementId = 'base_lobby'`
+    - `src/platform/commerce.ts`
+      - added `bannerAds` capabilities
+      - added `showBannerPlacementThroughPlatform()` / `hideBannerPlacementThroughPlatform()`
+      - extended native debug diagnostics with banner state
+    - `src/platform/capacitorCommercePlugin.ts`
+    - `src/platform/capacitorCommerceBridge.ts`
+      - mapped `showBannerPlacement` / `hideBannerPlacement`
+    - `src/scenes/mobileFrame.ts`
+      - added optional bottom inset support
+    - `src/scenes/BaseScene.ts`
+      - reserves a bottom inset only when banner capability is available
+      - shows `base_lobby` banner in the lobby
+      - hides the banner on scene shutdown and when ads are disabled
+  - Android native layer:
+    - `CommerceBackend.java`
+      - added banner show/hide methods
+    - `CommerceConfig.java`
+      - added `BASE_LOBBY_BANNER_AD_UNIT_ID` manifest metadata mapping
+    - `CommercePayloads.java`
+      - capabilities payload now includes `bannerAds`
+    - `ScrapFrontierCommercePlugin.java`
+      - validates and exposes `showBannerPlacement` / `hideBannerPlacement`
+    - `LocalSimulatorCommerceBackend.java`
+      - simulates lobby banner state for diagnostics
+    - `UnavailableCommerceBackend.java`
+      - explicitly reports banner unsupported
+    - `PlayServicesCommerceBackend.java`
+      - mounts a bottom AdMob banner container for `base_lobby`
+      - hides and destroys the banner cleanly
+      - exposes banner diagnostics and release-mapping checks
+    - `android/app/build.gradle`
+    - `android/app/src/main/AndroidManifest.xml`
+      - added release placeholder wiring for `SCRAP_BASE_LOBBY_BANNER_AD_UNIT_ID`
+  - Release docs:
+    - `docs/release-inputs/02-monetization-ids.md`
+      - now includes the `base_lobby` banner unit
+    - `docs/release-inputs/README.md`
+    - `ANDROID_SETUP.md`
+    - `MOBILE_BRIDGE.md`
+    - `RELEASE_STATUS.md`
+      - updated to reflect banner support and the added AdMob input
+- 2026-03-24: Verification after the lobby-banner pass:
+  - `npx tsc --noEmit` passed
+  - `npx vitest run tests/commerce.test.ts --reporter=verbose`
+    - failed in this sandbox with Windows `spawn EPERM`
+  - `npm run build`
+    - failed in this sandbox with Windows `spawn EPERM`
+    - Vite also warned that local Node `20.16.0` is below its recommended floor (`20.19+`)
+  - `npm run capture:scene -- --scene BaseScene --tutorial off --output-dir output/web-game/base-banner-check-latest`
+    - failed because Playwright browser launch also hit `spawn EPERM`
+
+TODO
+- Fill AdMob live values including `SCRAP_BASE_LOBBY_BANNER_AD_UNIT_ID_RELEASE`.
+- Re-run `npm run build` and `npm run capture:scene -- --scene BaseScene --tutorial off --output-dir output/web-game/base-banner-check-latest` in an environment without Windows `spawn EPERM`.
+- Re-run Android validation in a network-enabled environment:
+  - `npm run android:assemble:debug`
+  - `npm run android:assemble:release`
+  - `npm run android:bundle:release`
+- Verify banner visibility and banner removal (`commander_pack`) on a real Android device.
+- 2026-03-23: Split user-owned release answers into dedicated documents.
+  - Added:
+    - `docs/release-inputs/README.md`
+    - `docs/release-inputs/01-brand-legal.md`
+    - `docs/release-inputs/02-monetization-ids.md`
+    - `docs/release-inputs/03-android-release.md`
+    - `docs/release-inputs/04-store-listing.md`
+    - `docs/release-inputs/05-launch-ops.md`
+  - Added a release status hub:
+    - `RELEASE_STATUS.md`
+- 2026-03-23: Added pre-release Android release scaffolding.
+  - `android/app/build.gradle`
+    - now reads manifest placeholder values from:
+      - `android/release.properties`
+      - environment variables
+    - added release signing lookup from:
+      - `android/keystore.properties`
+      - environment variables
+    - added native SDK dependencies:
+      - Google Play Billing
+      - Google Mobile Ads
+    - added scripts:
+      - `android:assemble:release`
+      - `android:bundle:release`
+  - `android/app/src/main/AndroidManifest.xml`
+    - now uses placeholders for:
+      - commerce mode/capability flags
+      - product IDs
+      - rewarded ad unit IDs
+      - AdMob application ID
+  - Added:
+    - `android/release.properties.example`
+    - `android/keystore.properties.example`
+- 2026-03-23: Reworked the Android commerce backend from synchronous placeholder calls into async-capable native flows.
+  - `CommerceBackend.java`
+    - now accepts `PluginCall` so native backends can resolve after async purchase/ad callbacks
+  - `ScrapFrontierCommercePlugin.java`
+    - now delegates async call resolution to the selected backend
+    - releases backend resources on destroy
+  - Added `CommercePayloads.java` for shared native payload shaping
+  - `PlayServicesCommerceBackend.java`
+    - now performs:
+      - Play product detail query
+      - billing flow launch
+      - purchase callback handling
+      - purchase acknowledgement
+      - rewarded ad load/show/reward completion handling
+      - restore query for `INAPP` + `SUBS`
+    - remaining blocker is live IDs + device validation, not bridge design
+  - `ANDROID_SETUP.md` / `MOBILE_BRIDGE.md`
+    - updated to reflect the new release/realtime bridge state
+- 2026-03-23: Validation after the release-scaffolding pass:
+  - `npx tsc --noEmit` passed
+  - `npm test`
+    - still blocked in this sandbox by Windows `spawn EPERM`
+    - config-loading blockers were reduced, but Vite/Vitest still hit child-process restrictions during path resolution / worker setup here
+  - `npm run build`
+    - still blocked in this sandbox by Windows `spawn EPERM`
+    - also warns on local Node `20.16.0` vs Vite's recommended `20.19+`
+
+TODO
+- Fill user-owned release docs under `docs/release-inputs/`.
+- Create `android/release.properties` from the example file with real Play Console / AdMob IDs.
+- Create `android/keystore.properties` from the example file with real signing values.
+- Set `ANDROID_SDK_ROOT` or `ANDROID_HOME`, then rerun:
+  - `npm run android:assemble:debug`
+  - `npm run android:assemble:release`
+  - `npm run android:bundle:release`
+- Verify `PlayServicesCommerceBackend` on a real Android device with:
+  - purchase flow
+  - rewarded flow
+  - restore flow
+- Upgrade the validating Node runtime on the host machine to `20.19+` or newer before final Vite build verification.
+- 2026-03-23: Added release automation helpers after the first release-input split.
+  - Added:
+    - `scripts/init-release-files.mjs`
+    - `scripts/sync-release-metadata.mjs`
+    - `scripts/validate-release-config.mjs`
+  - Added npm scripts:
+    - `release:init`
+    - `release:sync`
+    - `release:validate`
+  - `release:sync` is designed to read:
+    - app name
+    - support email
+    from `docs/release-inputs/01-brand-legal.md`, then update:
+    - `src/app/appMeta.ts`
+    - `android/app/src/main/res/values/strings.xml`
+    - `public/privacy-policy.html`
+  - `release:validate` now checks:
+    - unanswered release-input docs
+    - release property keys
+    - keystore values + keystore file existence
+    - unresolved temporary support email usage
+- 2026-03-23: Extended Android release config beyond product/ad IDs.
+  - `android/app/build.gradle`
+    - now reads:
+      - `SCRAP_VERSION_CODE`
+      - `SCRAP_VERSION_NAME`
+    - keeps `versionCode` / `versionName` out of hardcoded release edits
+  - `android/release.properties.example`
+    - now includes version placeholders
+- 2026-03-23: Confirmed local Android SDK path exists on this machine and wrote:
+  - `android/local.properties`
+    - `sdk.dir=C\:\\Users\\hhy01\\AppData\\Local\\Android\\Sdk`
+- 2026-03-23: Native Android build verification progressed further than before.
+  - `gradlew assembleDebug`
+    - first failed because Gradle wrapper tried to use `C:\Users\CodexSandboxOffline\.gradle`
+    - rerun with `GRADLE_USER_HOME=D:\dev\game304\.gradle-user`
+    - wrapper download was then blocked by sandbox network restrictions
+  - copied the existing local Gradle 8.11.1 wrapper distribution cache from:
+    - `C:\Users\hhy01\.gradle\wrapper\dists\gradle-8.11.1-all`
+    into:
+    - `D:\dev\game304\.gradle-user\wrapper\dists\gradle-8.11.1-all`
+  - after that, Gradle started successfully but dependency resolution still failed because this sandbox cannot reach:
+    - `dl.google.com`
+    - `repo.maven.apache.org`
+  - conclusion:
+    - Android build validation is now blocked by sandbox network policy, not by missing SDK path
+- 2026-03-23: `npm run release:init` created:
+  - `android/release.properties`
+  - `android/keystore.properties`
+  - both remain gitignored placeholders until real values are entered
+- 2026-03-23: `npm run release:validate` currently fails for the expected external blockers:
+  - unanswered release-input docs
+  - missing real keystore secrets/file
+  - unresolved temporary support email in app metadata / privacy policy
+
+TODO
+- Fill user-owned release docs, then run:
+  - `npm run release:sync`
+  - `npm run release:validate`
+- Replace placeholder values inside:
+  - `android/release.properties`
+  - `android/keystore.properties`
+- Re-run Android validation in a network-enabled environment:
+  - `npm run android:assemble:debug`
+  - `npm run android:assemble:release`
+  - `npm run android:bundle:release`
+- Upgrade host Node to `20.19+` or newer, then re-run:
+  - `npm test`
+  - `npm run build`
+- 2026-03-23: Added save validation coverage for the web persistence layer.
+  - `src/state/persistence.ts`
+    - exported `STORAGE_KEY` so tests target the real save slot instead of a duplicated literal
+  - `tests/persistence.test.ts`
+    - verifies compatible saves hydrate correctly and surface an offline reward summary
+    - verifies stale save versions fall back to a fresh state and immediately persist the reset payload
+    - verifies restored store purchases are written back to `localStorage`
+- 2026-03-23: Validation after the save-persistence regression pass:
+  - `npx vitest run tests/persistence.test.ts --reporter=verbose` passed
+    - 1 file / 3 tests
+  - `npm test` passed
+    - 7 files / 41 tests
+  - `npm run build` passed
+  - `npm run capture:scene -- --scene BaseScene --tutorial off --output-dir output/web-game/base-clean-latest`
+    - the command hit a Windows child-process shutdown timeout, but refreshed `shot-0.png` and `state-0.json` were written successfully
+    - no `errors-0.json` was emitted
+    - refreshed `state-0.json` still reports:
+      - `app.id = "scrap-frontier"`
+      - `scene = "BaseScene"`
+
+TODO
+- Replace the current Android `local-simulator` commerce implementation with real Play Billing / rewarded-ad SDK wiring.
+- Configure Android SDK locally and rerun `npm run android:assemble:debug`.
+- Extend save validation from web `localStorage` hydration into native Android install/restore scenarios once the real commerce layer exists.
+- Continue Android packaging and store asset preparation.
+- 2026-03-23: Split the Android commerce plugin into backend-ready layers.
+  - Added Android-native helpers:
+    - `CommerceConfig.java`
+    - `CommercePreferences.java`
+    - `CommerceBackend.java`
+    - `LocalSimulatorCommerceBackend.java`
+    - `UnavailableCommerceBackend.java`
+  - `ScrapFrontierCommercePlugin.java`
+    - now selects a backend from manifest mode instead of hardcoding simulator logic inline
+    - `local-simulator` keeps the current native simulator behavior
+    - any non-`local-simulator` mode now resolves to an explicit unavailable backend instead of silently acting like the simulator
+  - This keeps the JS bridge contract stable while leaving a clean insertion point for a future real `play-services` backend.
+- 2026-03-23: Hardened the JS bridge against optimistic capability leakage.
+  - `src/platform/capacitorCommerceBridge.ts`
+    - if a native plugin exposes async `getCapabilities()`, the bridge no longer assumes purchase/rewarded support just because methods exist on the proxy
+  - `tests/commerce.test.ts`
+    - added a regression covering the async-capability case
+- 2026-03-23: Validation after the Android commerce backend split:
+  - `npm test` passed
+    - 7 files / 42 tests
+  - `npm run build` passed
+  - `npm run cap:sync:android` passed
+  - `npm run capture:scene -- --scene ShopScene --tutorial off --output-dir output/web-game/shop-clean-latest`
+    - hit a Windows child-process shutdown timeout, but refreshed `state-0.json` / `shot-0.png` were written
+    - no `errors-0.json` was emitted
+    - refreshed state still reports:
+      - `app.id = "scrap-frontier"`
+      - `scene = "ShopScene"`
+  - `npm run android:assemble:debug` was rerun
+    - still fails on the same machine-level blocker:
+      - Android SDK location not found
+      - fix path:
+        - `ANDROID_HOME`
+        - `ANDROID_SDK_ROOT`
+        - or `android/local.properties` with `sdk.dir=...`
+
+TODO
+- Implement the real Android `play-services` commerce backend behind the new backend-selection path.
+- Configure Android SDK locally and rerun `npm run android:assemble:debug`.
+- Extend save validation from web `localStorage` hydration into native Android install/restore scenarios once the real commerce layer exists.
+- Continue Android packaging and store asset preparation.
+- 2026-03-23: Added Android SDK-path preparation automation.
+  - Added `scripts/ensure-android-local-properties.mjs`
+    - reads `ANDROID_SDK_ROOT` / `ANDROID_HOME`
+    - writes `android/local.properties` automatically when the SDK path is available
+    - fails early with a direct setup message when the SDK path is still missing
+  - Updated `package.json`
+    - added `npm run android:prepare:sdk`
+    - `npm run android:assemble:debug` now runs the SDK preparation step before Gradle
+  - Updated `.gitignore`
+    - ignores `android/local.properties`
+- 2026-03-23: Validation after Android SDK preparation automation:
+  - `npm run android:prepare:sdk`
+    - failed fast with the expected direct setup message because the SDK path is not configured on this machine
+  - `npm run android:assemble:debug`
+    - now fails immediately through the same preparation check instead of descending into Gradle first
+
+TODO
+- Set `ANDROID_SDK_ROOT` or `ANDROID_HOME`, or create `android/local.properties`, then rerun `npm run android:assemble:debug`.
+- Implement the real Android `play-services` commerce backend behind the new backend-selection path.
+- Extend save validation from web `localStorage` hydration into native Android install/restore scenarios once the real commerce layer exists.
+- Continue Android packaging and store asset preparation.
+- 2026-03-23: Added a dedicated Android `play-services` backend path.
+  - Added `PlayServicesCommerceBackend.java`
+    - reads product IDs and rewarded ad unit IDs from manifest metadata
+    - reports conservative capability flags
+    - returns explicit `NOT CONFIGURED` / `NOT IMPLEMENTED` results instead of falling back to simulator behavior
+    - exposes missing mapping diagnostics for each offer / rewarded placement
+  - Expanded `CommerceConfig.java`
+    - now reads per-offer product IDs
+    - now reads per-placement ad unit IDs
+    - exposes `isPlayServicesMode()` plus mapping helpers
+  - Updated `ScrapFrontierCommercePlugin.java`
+    - selects `PlayServicesCommerceBackend` when `COMMERCE_MODE=play-services`
+  - Updated `AndroidManifest.xml`
+    - added empty placeholder metadata keys for product IDs and ad unit IDs so the configuration surface is explicit
+- 2026-03-23: Validation after the dedicated `play-services` backend path:
+  - `npm test` passed
+    - 7 files / 42 tests
+  - `npm run build` passed
+  - `npm run cap:sync:android` passed
+  - `npm run android:assemble:debug`
+    - still blocked before Gradle by the missing Android SDK path on this machine
+
+TODO
+- Set `ANDROID_SDK_ROOT` or `ANDROID_HOME`, or create `android/local.properties`, then rerun `npm run android:assemble:debug`.
+- Replace the `PlayServicesCommerceBackend` placeholder responses with real Play Billing purchase / restore flows and rewarded-ad SDK callbacks.
+- Extend save validation from web `localStorage` hydration into native Android install/restore scenarios once the real commerce layer exists.
+- Continue Android packaging and store asset preparation.
+- 2026-03-23: Surfaced native commerce diagnostics in the web runtime and shop UI.
+  - `src/platform/commerce.ts`
+    - added cached diagnostics helpers:
+      - `getCachedCommerceDiagnostics()`
+      - `refreshCommerceDiagnostics()`
+    - native/web commerce state can now expose backend diagnostics without re-fetching on every frame
+  - `src/scenes/ShopScene.ts`
+    - the shop status panel now shows a diagnostics line for backend/status
+    - missing offer/ad-unit mappings from the Android `play-services` backend now surface in the shop UI once diagnostics resolve
+  - `src/main.ts`
+    - `window.render_game_to_text` now includes `commerceDiagnostics`
+  - `tests/commerce.test.ts`
+    - added a regression covering diagnostics fetch + cache behavior
+- 2026-03-23: Validation after commerce diagnostics surfacing:
+  - `npm test` passed
+    - 7 files / 43 tests
+  - `npm run build` passed
+  - `npm run capture:scene -- --scene ShopScene --tutorial off --output-dir output/web-game/shop-clean-latest`
+    - this run was interrupted before clean command completion
+    - refreshed `state-0.json` was still written successfully
+    - refreshed state still reports:
+      - `app.id = "scrap-frontier"`
+      - `scene = "ShopScene"`
+
+TODO
+- Set `ANDROID_SDK_ROOT` or `ANDROID_HOME`, or create `android/local.properties`, then rerun `npm run android:assemble:debug`.
+- Replace the `PlayServicesCommerceBackend` placeholder responses with real Play Billing purchase / restore flows and rewarded-ad SDK callbacks.
+- Extend save validation from web `localStorage` hydration into native Android install/restore scenarios once the real commerce layer exists.
+- Continue Android packaging and store asset preparation.
+- 2026-03-22: Extended defeat-side recovery into repeated post-defeat zone3 win sequences.
+  - `tests/progression.test.ts`
+    - added an eleventh progression milestone:
+      - after the explicit counter-attack defeat and long recovery route, the recovered state must sustain repeated zone3 wins
+      - raid losses are applied back into state between those post-defeat wins
+    - added caching for the explicit defeat-recovery fixture so the tenth and eleventh scenarios do not recompute the same long recovery route
+  - The new regression verifies:
+    - at least 2 deterministic zone3 victories after the explicit defeat path
+    - at least one later victory after earlier post-defeat raid losses
+    - recovered post-defeat wins still meet survivor, loot, and core-return thresholds
+- 2026-03-22: Validation after repeated post-defeat wins:
+  - `npx vitest run tests/progression.test.ts --reporter=verbose` passed
+    - 11 progression tests passed
+  - `npm test` passed
+    - 6 files / 37 tests
+  - `npm run build` passed
+  - `npm run capture:scene -- --scene BaseScene --tutorial off --output-dir output/web-game/base-clean-latest`
+    - the clean rerun hit a shutdown timeout, but refreshed `shot-0.png` and `state-0.json` were written successfully
+  - Refreshed deterministic artifact:
+    - `output/web-game/base-clean-latest/shot-0.png`
+    - `output/web-game/base-clean-latest/state-0.json`
+  - Verified state expectation:
+    - `base-clean-latest/state-0.json` -> `scene = "BaseScene"`
+
+TODO
+- Replace the current Android `local-simulator` commerce implementation with real Play Billing / rewarded-ad SDK wiring.
+- Configure Android SDK locally and rerun `npm run android:assemble:debug`.
+- Extend defeat-side regression beyond repeated recovered wins into longer post-defeat economy pressure or repeated counter-attack loops after recovery.
+- Continue Android packaging and store asset preparation.
+- 2026-03-22: Tuned the first zone3 bridge encounter so defeat-side recovery can cross back into actual wins.
+  - `src/data/balance/enemyTemplates.json`
+    - `zone3_easy_a`
+      - turrets reduced `3 -> 2`
+      - HQ HP reduced `1220 -> 1100`
+  - This keeps `zone3_easy_a` as the explicit re-entry bridge after late setbacks instead of only a scouting-pressure marker.
+- 2026-03-22: Extended defeat-side recovery into actual deterministic zone3 wins.
+  - `tests/progression.test.ts`
+    - the tenth progression milestone now verifies a stronger boundary:
+      - after an explicit counter-attack defeat and long recovery route, the game can return to actual deterministic zone3 wins
+      - recovered post-defeat wins must still return meaningful `core`
+    - the defeat-side regression was renamed accordingly to match the stronger outcome
+- 2026-03-22: Validation after defeat-side win recovery:
+  - `npx vitest run tests/progression.test.ts --reporter=verbose` passed
+    - 10 progression tests passed
+  - `npm test` passed
+    - 6 files / 36 tests
+  - `npm run build` passed
+  - `npm run capture:scene -- --scene BaseScene --tutorial off --output-dir output/web-game/base-clean-latest` passed
+  - Refreshed deterministic artifact:
+    - `output/web-game/base-clean-latest/shot-0.png`
+    - `output/web-game/base-clean-latest/state-0.json`
+  - Verified state expectation:
+    - `base-clean-latest/state-0.json` -> `scene = "BaseScene"`
+  - Note:
+    - final verification remained sequential because Windows child-process shutdown still makes parallel `npm` verification unreliable.
+
+TODO
+- Replace the current Android `local-simulator` commerce implementation with real Play Billing / rewarded-ad SDK wiring.
+- Configure Android SDK locally and rerun `npm run android:assemble:debug`.
+- Extend defeat-side recovery from a single recovered win into repeated post-defeat zone3 win sequences.
+- Continue Android packaging and store asset preparation.

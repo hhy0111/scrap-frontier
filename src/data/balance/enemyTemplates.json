@@ -51,5 +51,122 @@
       { "unitId": "rifleman", "count": 3 },
       { "unitId": "shieldbot", "count": 1 }
     ]
+  },
+  {
+    "id": "zone2_easy_a",
+    "name": "Dust Rail Depot",
+    "difficulty": "easy",
+    "zoneTier": 2,
+    "turrets": 3,
+    "hqHp": 1080,
+    "storedRewards": { "scrap": 270, "power": 110, "core": 30 },
+    "defenders": [
+      { "unitId": "scavenger", "count": 2 },
+      { "unitId": "rifleman", "count": 2 },
+      { "unitId": "shieldbot", "count": 1 }
+    ]
+  },
+  {
+    "id": "zone2_normal_a",
+    "name": "Furnace Gate",
+    "difficulty": "normal",
+    "zoneTier": 2,
+    "turrets": 4,
+    "hqHp": 1150,
+    "storedRewards": { "scrap": 330, "power": 140, "core": 38 },
+    "defenders": [
+      { "unitId": "rifleman", "count": 2 },
+      { "unitId": "shieldbot", "count": 2 },
+      { "unitId": "rocket_buggy", "count": 1 }
+    ]
+  },
+  {
+    "id": "zone2_hard_a",
+    "name": "Cracked Power Spine",
+    "difficulty": "hard",
+    "zoneTier": 2,
+    "turrets": 4,
+    "hqHp": 1250,
+    "storedRewards": { "scrap": 400, "power": 175, "core": 50 },
+    "defenders": [
+      { "unitId": "rifleman", "count": 2 },
+      { "unitId": "shieldbot", "count": 2 },
+      { "unitId": "rocket_buggy", "count": 1 },
+      { "unitId": "repair_drone", "count": 1 }
+    ]
+  },
+  {
+    "id": "zone2_elite_a",
+    "name": "Signal Vault Bastion",
+    "difficulty": "elite",
+    "zoneTier": 2,
+    "turrets": 5,
+    "hqHp": 1320,
+    "storedRewards": { "scrap": 490, "power": 215, "core": 64 },
+    "defenders": [
+      { "unitId": "rifleman", "count": 2 },
+      { "unitId": "shieldbot", "count": 2 },
+      { "unitId": "rocket_buggy", "count": 2 },
+      { "unitId": "repair_drone", "count": 1 }
+    ]
+  },
+  {
+    "id": "zone3_easy_a",
+    "name": "Sunken Launch Yard",
+    "difficulty": "easy",
+    "zoneTier": 3,
+    "turrets": 2,
+    "hqHp": 1100,
+    "storedRewards": { "scrap": 430, "power": 185, "core": 56 },
+    "defenders": [
+      { "unitId": "rifleman", "count": 2 },
+      { "unitId": "shieldbot", "count": 1 },
+      { "unitId": "rocket_buggy", "count": 1 }
+    ]
+  },
+  {
+    "id": "zone3_normal_a",
+    "name": "Breaker Wall",
+    "difficulty": "normal",
+    "zoneTier": 3,
+    "turrets": 5,
+    "hqHp": 1450,
+    "storedRewards": { "scrap": 530, "power": 235, "core": 72 },
+    "defenders": [
+      { "unitId": "rifleman", "count": 2 },
+      { "unitId": "shieldbot", "count": 2 },
+      { "unitId": "rocket_buggy", "count": 2 },
+      { "unitId": "repair_drone", "count": 1 }
+    ]
+  },
+  {
+    "id": "zone3_hard_a",
+    "name": "Ash Reactor Crown",
+    "difficulty": "hard",
+    "zoneTier": 3,
+    "turrets": 5,
+    "hqHp": 1550,
+    "storedRewards": { "scrap": 660, "power": 300, "core": 92 },
+    "defenders": [
+      { "unitId": "rifleman", "count": 2 },
+      { "unitId": "shieldbot", "count": 2 },
+      { "unitId": "rocket_buggy", "count": 3 },
+      { "unitId": "repair_drone", "count": 1 }
+    ]
+  },
+  {
+    "id": "zone3_elite_a",
+    "name": "Black Core Foundry",
+    "difficulty": "elite",
+    "zoneTier": 3,
+    "turrets": 6,
+    "hqHp": 1700,
+    "storedRewards": { "scrap": 840, "power": 380, "core": 120 },
+    "defenders": [
+      { "unitId": "rifleman", "count": 2 },
+      { "unitId": "shieldbot", "count": 3 },
+      { "unitId": "rocket_buggy", "count": 3 },
+      { "unitId": "repair_drone", "count": 1 }
+    ]
   }
 ]

@@ -1,18 +1,31 @@
 {
-  "name": "game104",
+  "name": "scrap-frontier",
   "private": true,
   "version": "0.1.0",
   "type": "module",
   "scripts": {
-    "dev": "vite",
+    "dev": "vite --host 0.0.0.0 --port 5173",
     "build": "tsc --noEmit && vite build",
-    "preview": "vite preview",
-    "test": "vitest run"
+    "preview": "vite preview --host 0.0.0.0 --port 4173",
+    "test": "vitest run --dir tests --environment node",
+    "capture:scene": "node scripts/capture-scene.mjs",
+    "capture:core-scenes": "node scripts/capture-core-scenes.mjs",
+    "release:init": "node scripts/init-release-files.mjs",
+    "release:sync": "node scripts/sync-release-metadata.mjs",
+    "release:validate": "node scripts/validate-release-config.mjs",
+    "cap:sync:android": "npm run build && npx cap sync android",
+    "android:prepare:sdk": "node scripts/ensure-android-local-properties.mjs",
+    "android:assemble:debug": "npm run android:prepare:sdk && cd android && gradlew.bat assembleDebug",
+    "android:assemble:release": "npm run android:prepare:sdk && cd android && gradlew.bat assembleRelease",
+    "android:bundle:release": "npm run android:prepare:sdk && cd android && gradlew.bat bundleRelease"
   },
   "dependencies": {
+    "@capacitor/core": "^8.2.0",
     "phaser": "^3.90.0"
   },
   "devDependencies": {
+    "@capacitor/android": "^8.2.0",
+    "@capacitor/cli": "^7.6.0",
     "@types/node": "^24.0.0",
     "typescript": "^5.9.0",
     "vite": "^7.0.0",

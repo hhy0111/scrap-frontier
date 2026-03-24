@@ -5,8 +5,8 @@ import type { GameState } from '../../types/game';
 
 const HQ_COSTS: Record<number, ResourceAmount> = {
   2: { scrap: 300, power: 120, core: 30 },
-  3: { scrap: 520, power: 220, core: 55 },
-  4: { scrap: 860, power: 360, core: 90 },
+  3: { scrap: 460, power: 190, core: 40 },
+  4: { scrap: 860, power: 360, core: 55 },
   5: { scrap: 1300, power: 540, core: 140 }
 };
 

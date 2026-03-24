@@ -13,6 +13,18 @@ import {
   syncDailyMissions
 } from '../domain/meta/daily';
 import { buildOfflineRewardSummary } from '../domain/meta/offline';
+import { getRaidThreatGain } from '../domain/meta/raidThreat';
+import {
+  createInitialResearchLevels,
+  upgradeResearch as applyResearchUpgrade
+} from '../domain/meta/research';
+import {
+  claimMonthlySupply as applyMonthlySupplyClaim,
+  claimRewardedPlacement as applyRewardedPlacementClaim,
+  createInitialStoreState,
+  restoreStorePurchases as applyStorePurchaseRestore,
+  purchaseStoreOffer as applyStoreOfferPurchase
+} from '../domain/meta/store';
 import { queueUnit } from '../domain/training/queueUnit';
 import { appendLog } from '../utils/logger';
 import { nextId } from '../utils/ids';
@@ -20,7 +32,15 @@ import { addResources } from '../utils/resources';
 import { nowMs } from '../utils/time';
 import { loadPersistedState, persistState } from './persistence';
 import type { BalanceData } from '../types/balance';
-import type { GameState, ScoutTarget, StateListener, StructureInstance } from '../types/game';
+import type {
+  GameState,
+  RewardedPlacementId,
+  ResearchTrackId,
+  ScoutTarget,
+  ShopOfferId,
+  StateListener,
+  StructureInstance
+} from '../types/game';
 import type { RaidResolution, RaidState } from '../types/raid';
 
 export const balance = loadBalance();
@@ -66,6 +86,8 @@ const createInitialState = (now: number, currentBalance: BalanceData): GameState
       counterThreat: 0,
       dayIndex: getDayIndex(now),
       dailyMissions: createDailyMissions(),
+      researches: createInitialResearchLevels(),
+      store: createInitialStoreState(),
       tutorialStep: 0,
       tutorialDismissed: false
     },
@@ -122,6 +144,18 @@ const hydrateState = (currentBalance: BalanceData): GameState => {
       counterThreat: persisted.meta?.counterThreat ?? initial.meta.counterThreat,
       dayIndex: persisted.meta?.dayIndex ?? initial.meta.dayIndex,
       dailyMissions: persisted.meta?.dailyMissions ?? initial.meta.dailyMissions,
+      researches: {
+        ...initial.meta.researches,
+        ...persisted.meta?.researches
+      },
+      store: {
+        ...initial.meta.store,
+        ...persisted.meta?.store,
+        purchases: {
+          ...initial.meta.store.purchases,
+          ...persisted.meta?.store?.purchases
+        }
+      },
       tutorialStep: persisted.meta?.tutorialStep ?? initial.meta.tutorialStep,
       tutorialDismissed:
         persisted.meta?.tutorialDismissed ?? initial.meta.tutorialDismissed
@@ -283,6 +317,93 @@ class GameStore {
     this.commit(next);
   }
 
+  upgradeResearch(trackId: ResearchTrackId): void {
+    const now = nowMs();
+    const baseState = this.getLiveState(now);
+    let next = applyResearchUpgrade(
+      baseState,
+      this.currentBalance,
+      trackId,
+      now
+    );
+
+    if (next === baseState) {
+      return;
+    }
+
+    next.base.scoutTargets = generateScoutTargets(next, this.currentBalance, now);
+    next.base.selectedScoutTargetId = next.base.scoutTargets[0]?.id ?? null;
+    this.commit(next);
+  }
+
+  purchaseStoreOffer(offerId: ShopOfferId): void {
+    const now = nowMs();
+    const baseState = this.getLiveState(now);
+    const next = applyStoreOfferPurchase(
+      baseState,
+      this.currentBalance,
+      offerId,
+      now
+    );
+
+    if (next === baseState) {
+      return;
+    }
+
+    this.commit(next);
+  }
+
+  restoreStorePurchases(offerIds: ShopOfferId[], adsDisabled = false): void {
+    const now = nowMs();
+    const baseState = this.getLiveState(now);
+    const next = applyStorePurchaseRestore(
+      baseState,
+      this.currentBalance,
+      offerIds,
+      adsDisabled,
+      now
+    );
+
+    if (next === baseState) {
+      return;
+    }
+
+    this.commit(next);
+  }
+
+  claimMonthlySupply(): void {
+    const now = nowMs();
+    const baseState = this.getLiveState(now);
+    const next = applyMonthlySupplyClaim(
+      baseState,
+      this.currentBalance,
+      now
+    );
+
+    if (next === baseState) {
+      return;
+    }
+
+    this.commit(next);
+  }
+
+  claimRewardedPlacement(placementId: RewardedPlacementId): void {
+    const now = nowMs();
+    const baseState = this.getLiveState(now);
+    const next = applyRewardedPlacementClaim(
+      baseState,
+      this.currentBalance,
+      placementId,
+      now
+    );
+
+    if (next === baseState) {
+      return;
+    }
+
+    this.commit(next);
+  }
+
   refreshScoutTargets(): void {
     const now = nowMs();
     const next = structuredClone(this.getLiveState(now)) as GameState;
@@ -334,8 +455,7 @@ class GameStore {
     };
     next.meta.counterThreat = Math.min(
       100,
-      next.meta.counterThreat +
-        (resolution.result === 'victory' ? 25 : resolution.result === 'retreat' ? 10 : 5)
+      next.meta.counterThreat + getRaidThreatGain(resolution.result)
     );
     next.logs = appendLog(
       next.logs,

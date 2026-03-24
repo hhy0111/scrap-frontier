@@ -8,14 +8,17 @@ import {
   setLastRaidResolution
 } from '../state/session';
 import { createTutorialOverlay } from './TutorialOverlay';
+import { createMobileShell } from './mobileFrame';
 import { createButton, createPanel } from './ui';
 import { formatSeconds } from '../utils/time';
 import type { RaidActor, RaidState } from '../types/raid';
 
-const FIELD_X = 372;
-const FIELD_Y = 112;
-const FIELD_WIDTH = 870;
-const FIELD_HEIGHT = 530;
+const ORIGINAL_FIELD_RECT = {
+  x: 372,
+  y: 112,
+  width: 870,
+  height: 530
+};
 const SCREEN_OFFSET_X = 350;
 const SCREEN_OFFSET_Y = -20;
 
@@ -27,11 +30,43 @@ const UNIT_LABELS: Record<string, string> = {
   repair_drone: 'DRONE'
 };
 
+const ENTRY_NOTES: Record<RaidState['entryLane'], string> = {
+  left: 'LEFT FLANK',
+  mid: 'CENTER PUSH',
+  right: 'RIGHT SWEEP'
+};
+
 type ActorSnapshot = {
   hp: number;
   alive: boolean;
   cooldownLeft: number;
 };
+
+type FieldPlacement = {
+  key: string;
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  alpha?: number;
+  angle?: number;
+  depth?: number;
+};
+
+const GROUND_PLACEMENTS: FieldPlacement[] = [
+  { key: 'tile_wasteland_ground', x: 508, y: 252, width: 284, height: 220, alpha: 0.82, angle: -4, depth: 1 },
+  { key: 'tile_wasteland_ground', x: 772, y: 252, width: 284, height: 220, alpha: 0.82, angle: 3, depth: 1 },
+  { key: 'tile_wasteland_ground', x: 1036, y: 252, width: 284, height: 220, alpha: 0.82, angle: -2, depth: 1 },
+  { key: 'tile_wasteland_ground', x: 640, y: 494, width: 320, height: 230, alpha: 0.82, angle: -5, depth: 1 },
+  { key: 'tile_wasteland_ground', x: 964, y: 494, width: 320, height: 230, alpha: 0.82, angle: 4, depth: 1 },
+  { key: 'tile_metal_floor', x: 1094, y: 258, width: 236, height: 188, alpha: 0.9, angle: 4, depth: 2 },
+  { key: 'prop_wall_straight', x: 978, y: 152, width: 188, height: 54, alpha: 0.95, depth: 2 },
+  { key: 'prop_wall_corner', x: 1106, y: 198, width: 178, height: 116, alpha: 0.96, depth: 2 },
+  { key: 'prop_radar_antenna', x: 1160, y: 144, width: 72, height: 72, alpha: 0.96, depth: 2 },
+  { key: 'prop_resource_crate', x: 1056, y: 504, width: 106, height: 74, alpha: 0.96, depth: 2 },
+  { key: 'prop_fuel_barrels', x: 1130, y: 520, width: 104, height: 76, alpha: 0.96, depth: 2 },
+  { key: 'prop_debris_cluster', x: 496, y: 522, width: 122, height: 86, alpha: 0.92, depth: 2 }
+];
 
 const toScreenPosition = (actor: RaidActor): { x: number; y: number } => ({
   x: actor.x + SCREEN_OFFSET_X,
@@ -42,9 +77,9 @@ const getLaneBand = (
   lane: RaidState['entryLane']
 ): { y: number; height: number } => {
   const topMap = {
-    left: FIELD_Y + 28,
-    mid: FIELD_Y + 190,
-    right: FIELD_Y + 352
+    left: ORIGINAL_FIELD_RECT.y + 28,
+    mid: ORIGINAL_FIELD_RECT.y + 190,
+    right: ORIGINAL_FIELD_RECT.y + 352
   };
 
   return { y: topMap[lane], height: 128 };
@@ -52,6 +87,8 @@ const getLaneBand = (
 
 export class RaidScene extends Phaser.Scene {
   private raid: RaidState | null = null;
+
+  private fieldRect = new Phaser.Geom.Rectangle();
 
   private fieldGraphics?: Phaser.GameObjects.Graphics;
 
@@ -69,6 +106,8 @@ export class RaidScene extends Phaser.Scene {
 
   private finalized = false;
 
+  private captureHold = false;
+
   private actorSprites = new Map<string, Phaser.GameObjects.Image>();
 
   constructor() {
@@ -76,42 +115,52 @@ export class RaidScene extends Phaser.Scene {
   }
 
   create(): void {
-    this.cameras.main.setBackgroundColor('#11100f');
     this.raid = getCurrentRaid();
+    const debugQuery = new URLSearchParams(window.location.search);
+    this.captureHold = debugQuery.get('raidDebug') === 'hold';
 
     if (!this.raid) {
       this.scene.start('BaseScene');
       return;
     }
 
-    createPanel(this, 18, 14, 1244, 56, undefined, 0x4d3323);
-    createPanel(this, 18, 82, 320, 588, 'COMBAT HUD', 0x8ef2d3);
-    createPanel(this, 352, 82, 910, 588, 'BATTLEFIELD', 0xd08c55);
-    addAssetImage(this, 'ui_icon_raid', 66, 42, 40);
-
-    this.add.text(98, 20, 'AUTO RAID', {
-      fontSize: '28px',
-      color: '#f0c27b',
-      fontFamily: 'monospace'
+    const shell = createMobileShell(this, {
+      title: 'AUTO RAID',
+      subtitle: 'PORTRAIT COMBAT FEED',
+      accent: 0xd08c55,
+      iconKey: 'ui_icon_raid',
+      backgroundColor: '#13100d'
     });
+    const commandY = shell.bodyTop;
+    const fieldY = commandY + 92;
+    const squadY = fieldY + 298;
+    const briefY = squadY + 100;
+    const footerButtonY = shell.footerY - 10;
 
-    this.headerText = this.add.text(34, 118, '', {
-      fontSize: '18px',
+    createPanel(this, shell.contentX, commandY, shell.contentWidth, 84, 'COMBAT HUD', 0x8ef2d3);
+    createPanel(this, shell.contentX, fieldY, shell.contentWidth, 290, 'BATTLEFIELD', 0xd08c55);
+    createPanel(this, shell.contentX, squadY, shell.contentWidth, 92, 'SQUAD / LOOT', 0x35574a);
+    createPanel(this, shell.contentX, briefY, shell.contentWidth, 58, 'COMBAT BRIEF', 0x4d3323);
+
+    this.fieldRect.setTo(shell.contentX + 10, fieldY + 38, shell.contentWidth - 20, 236);
+
+    this.headerText = this.add.text(shell.contentX + 16, commandY + 38, '', {
+      fontSize: '11px',
       color: '#f3ead9',
       fontFamily: 'monospace',
-      wordWrap: { width: 280 }
+      wordWrap: { width: 356 }
     });
-    this.squadText = this.add.text(34, 248, '', {
-      fontSize: '16px',
-      color: '#9fe7f2',
+    this.squadText = this.add.text(shell.contentX + 16, squadY + 38, '', {
+      fontSize: '11px',
+      color: '#d8fff5',
       fontFamily: 'monospace',
-      wordWrap: { width: 280 }
+      wordWrap: { width: 356 }
     });
-    this.legendText = this.add.text(34, 500, '', {
-      fontSize: '14px',
-      color: '#c7bbb0',
+    this.legendText = this.add.text(shell.contentX + 16, briefY + 34, '', {
+      fontSize: '10px',
+      color: '#d8c7bb',
       fontFamily: 'monospace',
-      wordWrap: { width: 280 }
+      wordWrap: { width: 356 }
     });
 
     this.createBattlefieldDecor();
@@ -120,17 +169,19 @@ export class RaidScene extends Phaser.Scene {
     this.fieldGraphics = this.add.graphics().setDepth(4);
     this.overlayGraphics = this.add.graphics().setDepth(8);
 
-    createButton(this, 24, 620, 150, 44, 'Retreat', () => {
+    createButton(this, shell.contentX + 58, footerButtonY, 96, 28, 'Retreat', () => {
       if (this.raid) {
         this.raid = forceRetreat(this.raid);
+        setCurrentRaid(this.raid);
       }
     }, 0x5a2424);
-    createButton(this, 186, 620, 150, 44, 'Rally', () => {
+    createButton(this, shell.contentX + 194, footerButtonY, 112, 28, 'Rally', () => {
       if (this.raid) {
         this.raid = triggerRally(this.raid);
+        setCurrentRaid(this.raid);
       }
     }, 0x35574a);
-    createButton(this, 348, 620, 150, 44, 'Speed x1/x2', () => {
+    createButton(this, shell.contentX + 328, footerButtonY, 120, 28, 'Speed x1/x2', () => {
       this.speedMultiplier = this.speedMultiplier === 1 ? 2 : 1;
     }, 0x27424b);
 
@@ -140,50 +191,60 @@ export class RaidScene extends Phaser.Scene {
     createTutorialOverlay(this, 'RaidScene');
   }
 
+  private mapFieldPoint(x: number, y: number): { x: number; y: number } {
+    return {
+      x:
+        this.fieldRect.x +
+        ((x - ORIGINAL_FIELD_RECT.x) / ORIGINAL_FIELD_RECT.width) * this.fieldRect.width,
+      y:
+        this.fieldRect.y +
+        ((y - ORIGINAL_FIELD_RECT.y) / ORIGINAL_FIELD_RECT.height) * this.fieldRect.height
+    };
+  }
+
+  private scaleFieldWidth(width: number): number {
+    return (width / ORIGINAL_FIELD_RECT.width) * this.fieldRect.width;
+  }
+
+  private scaleFieldHeight(height: number): number {
+    return (height / ORIGINAL_FIELD_RECT.height) * this.fieldRect.height;
+  }
+
+  private createFieldImage(placement: FieldPlacement): Phaser.GameObjects.Image {
+    const point = this.mapFieldPoint(placement.x, placement.y);
+    return addSizedAssetImage(
+      this,
+      placement.key,
+      point.x,
+      point.y,
+      this.scaleFieldWidth(placement.width),
+      this.scaleFieldHeight(placement.height),
+      placement.alpha ?? 1
+    )
+      .setAngle(placement.angle ?? 0)
+      .setDepth(placement.depth ?? 1);
+  }
+
   private createBattlefieldDecor(): void {
     if (!this.raid) {
       return;
     }
 
-    const groundPlacements = [
-      { x: 508, y: 252, width: 284, height: 220, angle: -4 },
-      { x: 772, y: 252, width: 284, height: 220, angle: 3 },
-      { x: 1036, y: 252, width: 284, height: 220, angle: -2 },
-      { x: 640, y: 494, width: 320, height: 230, angle: -5 },
-      { x: 964, y: 494, width: 320, height: 230, angle: 4 }
-    ];
-
-    groundPlacements.forEach((placement) => {
-      addSizedAssetImage(
-        this,
-        'tile_wasteland_ground',
-        placement.x,
-        placement.y,
-        placement.width,
-        placement.height,
-        0.82
-      )
-        .setDepth(1)
-        .setAngle(placement.angle);
+    GROUND_PLACEMENTS.forEach((placement) => {
+      this.createFieldImage(placement);
     });
 
-    addSizedAssetImage(this, 'tile_metal_floor', 1094, 258, 236, 188, 0.9)
-      .setDepth(2)
-      .setAngle(4);
-    addSizedAssetImage(this, 'prop_wall_straight', 978, 152, 188, 54, 0.95).setDepth(2);
-    addSizedAssetImage(this, 'prop_wall_corner', 1106, 198, 178, 116, 0.96).setDepth(2);
-    addSizedAssetImage(this, 'prop_radar_antenna', 1160, 144, 72, 72, 0.96).setDepth(2);
-    addSizedAssetImage(this, 'prop_resource_crate', 1056, 504, 106, 74, 0.96).setDepth(2);
-    addSizedAssetImage(this, 'prop_fuel_barrels', 1130, 520, 104, 76, 0.96).setDepth(2);
-    addSizedAssetImage(this, 'prop_debris_cluster', 496, 522, 122, 86, 0.92).setDepth(2);
-
     const laneBand = getLaneBand(this.raid.entryLane);
+    const laneMarkerPoint = this.mapFieldPoint(
+      ORIGINAL_FIELD_RECT.x + 52,
+      laneBand.y + laneBand.height / 2
+    );
     this.laneMarker = addAssetImage(
       this,
       'fx_target_marker',
-      FIELD_X + 52,
-      laneBand.y + laneBand.height / 2,
-      52
+      laneMarkerPoint.x,
+      laneMarkerPoint.y,
+      Math.max(24, this.scaleFieldWidth(52))
     )
       .setDepth(4)
       .setAlpha(0.72);
@@ -203,19 +264,41 @@ export class RaidScene extends Phaser.Scene {
   }
 
   private createActorSprite(actor: RaidActor): Phaser.GameObjects.Image {
-    const { x, y } = toScreenPosition(actor);
+    const position = toScreenPosition(actor);
     const textureKey =
       actor.kind === 'unit'
         ? `unit_${actor.sourceId}`
         : actor.kind === 'turret'
           ? 'building_auto_turret'
           : 'building_command_center';
+
     const sprite =
       actor.kind === 'hq'
-        ? addSizedAssetImage(this, textureKey, x + 44, y + 18, 174, 174)
+        ? addSizedAssetImage(
+            this,
+            textureKey,
+            this.mapFieldPoint(position.x + 44, position.y + 18).x,
+            this.mapFieldPoint(position.x + 44, position.y + 18).y,
+            this.scaleFieldWidth(174),
+            this.scaleFieldHeight(174)
+          )
         : actor.kind === 'turret'
-          ? addSizedAssetImage(this, textureKey, x + 6, y + 2, 84, 84)
-          : addSizedAssetImage(this, textureKey, x, y, 58, 58);
+          ? addSizedAssetImage(
+              this,
+              textureKey,
+              this.mapFieldPoint(position.x + 6, position.y + 2).x,
+              this.mapFieldPoint(position.x + 6, position.y + 2).y,
+              this.scaleFieldWidth(84),
+              this.scaleFieldHeight(84)
+            )
+          : addSizedAssetImage(
+              this,
+              textureKey,
+              this.mapFieldPoint(position.x, position.y).x,
+              this.mapFieldPoint(position.x, position.y).y,
+              this.scaleFieldWidth(58),
+              this.scaleFieldHeight(58)
+            );
 
     sprite.setDepth(actor.kind === 'unit' ? 6 : 5);
 
@@ -236,35 +319,81 @@ export class RaidScene extends Phaser.Scene {
     }
 
     const laneBand = getLaneBand(this.raid.entryLane);
+    const laneTop = this.mapFieldPoint(ORIGINAL_FIELD_RECT.x, laneBand.y).y;
+    const laneHeight = this.scaleFieldHeight(laneBand.height);
+    const dividerLeft = this.mapFieldPoint(ORIGINAL_FIELD_RECT.x + 232, ORIGINAL_FIELD_RECT.y).x;
+    const dividerRight = this.mapFieldPoint(ORIGINAL_FIELD_RECT.x + 610, ORIGINAL_FIELD_RECT.y).x;
     const overlayGraphics = this.overlayGraphics;
 
     this.fieldGraphics.clear();
-    this.fieldGraphics.fillStyle(0x170f0c, 0.28).fillRect(FIELD_X, FIELD_Y, FIELD_WIDTH, FIELD_HEIGHT);
-    this.fieldGraphics.lineStyle(2, 0x41535a, 1).strokeRect(FIELD_X, FIELD_Y, FIELD_WIDTH, FIELD_HEIGHT);
-    this.fieldGraphics.fillStyle(0x3fe0be, 0.09).fillRoundedRect(FIELD_X + 10, laneBand.y, FIELD_WIDTH - 20, laneBand.height, 18);
-    this.fieldGraphics.lineStyle(2, 0x67f1d1, 0.55).strokeRoundedRect(FIELD_X + 10, laneBand.y, FIELD_WIDTH - 20, laneBand.height, 18);
+    this.fieldGraphics.fillStyle(0x170f0c, 0.28).fillRect(
+      this.fieldRect.x,
+      this.fieldRect.y,
+      this.fieldRect.width,
+      this.fieldRect.height
+    );
+    this.fieldGraphics.lineStyle(2, 0x41535a, 1).strokeRect(
+      this.fieldRect.x,
+      this.fieldRect.y,
+      this.fieldRect.width,
+      this.fieldRect.height
+    );
+    this.fieldGraphics.fillStyle(0x3fe0be, 0.09).fillRoundedRect(
+      this.fieldRect.x + 6,
+      laneTop,
+      this.fieldRect.width - 12,
+      laneHeight,
+      16
+    );
+    this.fieldGraphics.lineStyle(2, 0x67f1d1, 0.55).strokeRoundedRect(
+      this.fieldRect.x + 6,
+      laneTop,
+      this.fieldRect.width - 12,
+      laneHeight,
+      16
+    );
     this.fieldGraphics.lineStyle(1, 0x7a604a, 0.65);
-    this.fieldGraphics.lineBetween(FIELD_X + 232, FIELD_Y + 20, FIELD_X + 232, FIELD_Y + FIELD_HEIGHT - 20);
-    this.fieldGraphics.lineBetween(FIELD_X + 610, FIELD_Y + 20, FIELD_X + 610, FIELD_Y + FIELD_HEIGHT - 20);
-    this.laneMarker?.setPosition(FIELD_X + 52, laneBand.y + laneBand.height / 2);
+    this.fieldGraphics.lineBetween(
+      dividerLeft,
+      this.fieldRect.y + 12,
+      dividerLeft,
+      this.fieldRect.y + this.fieldRect.height - 12
+    );
+    this.fieldGraphics.lineBetween(
+      dividerRight,
+      this.fieldRect.y + 12,
+      dividerRight,
+      this.fieldRect.y + this.fieldRect.height - 12
+    );
+
+    const laneMarkerPoint = this.mapFieldPoint(
+      ORIGINAL_FIELD_RECT.x + 52,
+      laneBand.y + laneBand.height / 2
+    );
+    this.laneMarker?.setPosition(laneMarkerPoint.x, laneMarkerPoint.y);
 
     overlayGraphics.clear();
 
     const actors = [...this.raid.playerActors, ...this.raid.enemyActors];
     actors.forEach((actor) => {
-      const { x, y } = toScreenPosition(actor);
-      const width = actor.kind === 'hq' ? 84 : actor.kind === 'turret' ? 50 : 40;
-      const barX = actor.kind === 'hq' ? x + 4 : x - width / 2;
-      const barY = actor.kind === 'hq' ? y - 74 : actor.kind === 'turret' ? y - 38 : y - 34;
+      const position = toScreenPosition(actor);
       const hpRatio = Math.max(0, actor.hp) / actor.maxHp;
       const hpColor = actor.team === 'player' ? 0x6ef0ca : 0xffb560;
+      const width = actor.kind === 'hq' ? this.scaleFieldWidth(84) : actor.kind === 'turret' ? this.scaleFieldWidth(50) : this.scaleFieldWidth(40);
+      const barHeight = Math.max(4, this.scaleFieldHeight(6));
+      const barPoint =
+        actor.kind === 'hq'
+          ? this.mapFieldPoint(position.x + 4, position.y - 74)
+          : actor.kind === 'turret'
+            ? this.mapFieldPoint(position.x - 18, position.y - 38)
+            : this.mapFieldPoint(position.x - 20, position.y - 34);
 
-      overlayGraphics.fillStyle(0x221713, 0.95).fillRect(barX, barY, width, 6);
+      overlayGraphics.fillStyle(0x221713, 0.95).fillRect(barPoint.x, barPoint.y, width, barHeight);
       overlayGraphics.fillStyle(hpColor, actor.alive ? 1 : 0.25).fillRect(
-        barX,
-        barY,
+        barPoint.x,
+        barPoint.y,
         width * hpRatio,
-        6
+        barHeight
       );
     });
   }
@@ -282,23 +411,35 @@ export class RaidScene extends Phaser.Scene {
         return;
       }
 
-      const { x, y } = toScreenPosition(actor);
+      const position = toScreenPosition(actor);
       const isDestroyedHq = actor.kind === 'hq' && actor.hp / actor.maxHp < 0.45;
+      const sizeMultiplier = actor.alive ? 1 : 0.92;
 
       if (actor.kind === 'hq') {
-        sprite.setPosition(x + 44, y + 18);
-        sprite.setDisplaySize(174, 174);
+        const point = this.mapFieldPoint(position.x + 44, position.y + 18);
+        sprite.setPosition(point.x, point.y);
+        sprite.setDisplaySize(
+          this.scaleFieldWidth(174) * sizeMultiplier,
+          this.scaleFieldHeight(174) * sizeMultiplier
+        );
         sprite.setTexture(isDestroyedHq ? 'building_command_center_damaged' : 'building_command_center');
       } else if (actor.kind === 'turret') {
-        sprite.setPosition(x + 6, y + 2);
-        sprite.setDisplaySize(84, 84);
+        const point = this.mapFieldPoint(position.x + 6, position.y + 2);
+        sprite.setPosition(point.x, point.y);
+        sprite.setDisplaySize(
+          this.scaleFieldWidth(84) * sizeMultiplier,
+          this.scaleFieldHeight(84) * sizeMultiplier
+        );
       } else {
-        sprite.setPosition(x, y);
-        sprite.setDisplaySize(58, 58);
+        const point = this.mapFieldPoint(position.x, position.y);
+        sprite.setPosition(point.x, point.y);
+        sprite.setDisplaySize(
+          this.scaleFieldWidth(58) * sizeMultiplier,
+          this.scaleFieldHeight(58) * sizeMultiplier
+        );
       }
 
       sprite.setAlpha(actor.alive ? 1 : 0.24);
-      sprite.setScale(actor.alive ? 1 : 0.92);
     });
   }
 
@@ -311,7 +452,15 @@ export class RaidScene extends Phaser.Scene {
     duration = 260,
     targetScale = 1.24
   ): void {
-    const fx = addSizedAssetImage(this, textureKey, x, y, width, height).setDepth(9);
+    const point = this.mapFieldPoint(x, y);
+    const fx = addSizedAssetImage(
+      this,
+      textureKey,
+      point.x,
+      point.y,
+      this.scaleFieldWidth(width),
+      this.scaleFieldHeight(height)
+    ).setDepth(9);
 
     this.tweens.add({
       targets: fx,
@@ -341,29 +490,29 @@ export class RaidScene extends Phaser.Scene {
         return;
       }
 
-      const { x, y } = toScreenPosition(actor);
+      const position = toScreenPosition(actor);
 
       if (previous.cooldownLeft <= 0.05 && actor.cooldownLeft > 0.2 && actor.alive) {
         if (actor.heal > 0) {
-          this.spawnFx('fx_repair_pulse', x, y, 84, 84, 360, 1.15);
+          this.spawnFx('fx_repair_pulse', position.x, position.y, 84, 84, 360, 1.15);
         } else if (actor.sourceId === 'rocket_buggy') {
-          this.spawnFx('fx_rocket_launch', x + 12, y - 10, 76, 76, 320, 1.12);
+          this.spawnFx('fx_rocket_launch', position.x + 12, position.y - 10, 76, 76, 320, 1.12);
         } else {
-          this.spawnFx('fx_muzzle_flash_small', x + 12, y - 10, 54, 54, 180, 1.08);
+          this.spawnFx('fx_muzzle_flash_small', position.x + 12, position.y - 10, 54, 54, 180, 1.08);
         }
       }
 
       if (actor.hp > previous.hp + 0.5) {
-        this.spawnFx('fx_repair_pulse', x, y, 78, 78, 320, 1.14);
+        this.spawnFx('fx_repair_pulse', position.x, position.y, 78, 78, 320, 1.14);
       } else if (actor.hp < previous.hp - 0.5) {
-        this.spawnFx('fx_bullet_impact', x, y, 64, 64, 220, 1.18);
+        this.spawnFx('fx_bullet_impact', position.x, position.y, 64, 64, 220, 1.18);
       }
 
       if (previous.alive && !actor.alive) {
         this.spawnFx(
           'fx_explosion_medium',
-          x,
-          y,
+          position.x,
+          position.y,
           actor.kind === 'hq' ? 180 : 118,
           actor.kind === 'hq' ? 180 : 118,
           420,
@@ -371,8 +520,8 @@ export class RaidScene extends Phaser.Scene {
         );
         this.spawnFx(
           'fx_destroyed_smoke',
-          x,
-          y - 6,
+          position.x,
+          position.y - 6,
           actor.kind === 'hq' ? 168 : 106,
           actor.kind === 'hq' ? 168 : 106,
           860,
@@ -383,8 +532,24 @@ export class RaidScene extends Phaser.Scene {
 
     if (previousRaid.rallyActiveSec <= 0 && currentRaid.rallyActiveSec > 0) {
       const laneBand = getLaneBand(currentRaid.entryLane);
-      this.spawnFx('fx_repair_pulse', FIELD_X + 110, laneBand.y + laneBand.height / 2, 132, 132, 480, 1.18);
-      this.spawnFx('fx_target_marker', FIELD_X + 170, laneBand.y + laneBand.height / 2, 108, 108, 420, 1.06);
+      this.spawnFx(
+        'fx_repair_pulse',
+        ORIGINAL_FIELD_RECT.x + 110,
+        laneBand.y + laneBand.height / 2,
+        132,
+        132,
+        480,
+        1.18
+      );
+      this.spawnFx(
+        'fx_target_marker',
+        ORIGINAL_FIELD_RECT.x + 170,
+        laneBand.y + laneBand.height / 2,
+        108,
+        108,
+        420,
+        1.06
+      );
     }
   }
 
@@ -400,17 +565,33 @@ export class RaidScene extends Phaser.Scene {
     const aliveTurrets = this.raid.enemyActors.filter(
       (actor) => actor.alive && actor.kind === 'turret'
     ).length;
+    const enemyHq = this.raid.enemyActors.find((actor) => actor.kind === 'hq');
+    const squadLine = Object.entries(this.raid.selectedSquad)
+      .filter(([, count]) => count > 0)
+      .map(([unitId, count]) => `${UNIT_LABELS[unitId] ?? unitId} ${count}`)
+      .join(' | ');
 
     this.headerText?.setText(
-      `TIME ${formatSeconds(this.raid.timeSec)}\nRESULT ${this.raid.result.toUpperCase()}\nLANE ${this.raid.entryLane.toUpperCase()}\nSPEED x${this.speedMultiplier}\n\nPLAYER ${alivePlayerUnits} alive\nENEMY ${aliveEnemyUnits} + TURRET ${aliveTurrets}`
+      [
+        `TIME ${formatSeconds(this.raid.timeSec)} | RESULT ${this.raid.result.toUpperCase()}`,
+        `LANE ${this.raid.entryLane.toUpperCase()} | ${ENTRY_NOTES[this.raid.entryLane]}`,
+        `SPEED x${this.speedMultiplier} | RALLY ${
+          this.raid.rallyActiveSec > 0
+            ? `ACTIVE ${this.raid.rallyActiveSec.toFixed(1)}s`
+            : `CD ${this.raid.rallyCooldownSec.toFixed(1)}s`
+        }`,
+        `FRONT ${alivePlayerUnits} | ENEMY ${aliveEnemyUnits} | TURRETS ${aliveTurrets}`
+      ].join('\n')
     );
     this.squadText?.setText(
-      `SQUAD\n${Object.entries(this.raid.selectedSquad)
-        .map(([unitId, count]) => `${UNIT_LABELS[unitId] ?? unitId}: ${count}`)
-        .join('\n')}\n\nRALLY ${this.raid.rallyActiveSec > 0 ? `ACTIVE ${this.raid.rallyActiveSec.toFixed(1)}s` : `CD ${this.raid.rallyCooldownSec.toFixed(1)}s`}`
+      [
+        `SQUAD ${squadLine || 'EMPTY'}`,
+        `HQ ${Math.ceil(enemyHq?.hp ?? 0)}/${Math.ceil(enemyHq?.maxHp ?? 0)} | LOOT ${this.raid.rewards.scrap}S ${this.raid.rewards.power}P ${this.raid.rewards.core}C`,
+        'RETREAT CASHES OUT HALF OF CURRENT LOOT.'
+      ].join('\n')
     );
     this.legendText?.setText(
-      'BATTLEFLOW\nGreen band is the chosen entry route.\nUnits auto-move and attack by range.\nHQ shifts to damaged art at low HP.\n\nRally boosts movement and attack cadence.\nRetreat keeps only half of current loot.'
+      'Tinted lane marks the chosen entry route. Rally spikes move + attack cadence for a short window.'
     );
   }
 
@@ -432,10 +613,15 @@ export class RaidScene extends Phaser.Scene {
       return;
     }
 
+    if (this.captureHold) {
+      return;
+    }
+
     const previousRaid = structuredClone(this.raid) as RaidState;
 
     if (this.raid.result === 'running') {
       this.raid = stepRaid(this.raid, delta * this.speedMultiplier);
+      setCurrentRaid(this.raid);
       this.emitCombatFx(previousRaid, this.raid);
     } else {
       this.finalizeRaid();

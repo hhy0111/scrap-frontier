@@ -35,12 +35,14 @@ export const buildOfflineRewardSummary = (
   if (total <= 0) {
     return {
       minutes,
-      reward: emptyResources()
+      reward: emptyResources(),
+      boosted: false
     };
   }
 
   return {
     minutes,
-    reward
+    reward,
+    boosted: false
   };
 };

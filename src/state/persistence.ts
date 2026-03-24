@@ -1,6 +1,6 @@
 import type { GameState } from '../types/game';
 
-const STORAGE_KEY = 'scrap-frontier-save';
+export const STORAGE_KEY = 'scrap-frontier-save';
 
 export const loadPersistedState = (): GameState | null => {
   try {

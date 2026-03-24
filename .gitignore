@@ -2,3 +2,8 @@ node_modules/
 dist/
 .vite/
 image/
+.gradle-user/
+output/
+android/local.properties
+android/release.properties
+android/keystore.properties

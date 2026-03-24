@@ -1,5 +1,6 @@
 import { createDailyMissions, getDayIndex } from '../src/domain/meta/daily';
 import { loadBalance } from '../src/data/loadBalance';
+import { createInitialStoreState } from '../src/domain/meta/store';
 import type { BalanceData } from '../src/types/balance';
 import type { GameState, StructureInstance } from '../src/types/game';
 
@@ -46,6 +47,11 @@ export const createTestState = (balance = createTestBalance()): GameState => ({
     counterThreat: 0,
     dayIndex: getDayIndex(0),
     dailyMissions: createDailyMissions(),
+    researches: {
+      barracks: 0,
+      garage: 0
+    },
+    store: createInitialStoreState(),
     tutorialStep: 0,
     tutorialDismissed: false
   },

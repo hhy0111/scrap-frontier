@@ -1,12 +1,35 @@
 import Phaser from 'phaser';
-import { addAssetImage, addBuildingImage } from '../app/assets';
+import { addBuildingImage } from '../app/assets';
 import { getHqLevelCost } from '../domain/base/levelUpHq';
 import { getStructureUpgradeCost } from '../domain/base/upgradeStructure';
+import { getResearchCost, getResearchDefinition } from '../domain/meta/research';
+import {
+  getUpcomingUnlockMilestones,
+  getUnlockMilestoneItems,
+  getUnlockStatus
+} from '../domain/meta/unlocks';
+import {
+  getCommerceCapabilities,
+  hideBannerPlacementThroughPlatform,
+  showBannerPlacementThroughPlatform
+} from '../platform/commerce';
 import { balance, gameStore } from '../state/gameState';
 import { createTutorialOverlay } from './TutorialOverlay';
-import { createButton, createPanel } from './ui';
+import { createMobileShell } from './mobileFrame';
+import { createButton } from './ui';
+import { canAfford } from '../utils/resources';
 import type { ResourceAmount } from '../types/balance';
-import type { DailyMission, GameState, StructureInstance } from '../types/game';
+import type { GameState, ResearchTrackId, StructureInstance } from '../types/game';
+import type { UnlockMilestone, UnlockStatus } from '../domain/meta/unlocks';
+
+type ActionMode = 'build' | 'train' | 'ops' | 'admin';
+
+type ActionButtonDefinition = {
+  label: string;
+  onClick: () => void;
+  fillColor?: number;
+  isEnabled: (state: GameState) => boolean;
+};
 
 const STRUCTURE_LABELS: Record<string, string> = {
   command_center: 'HQ',
@@ -87,70 +110,203 @@ const getStructureDetail = (structure: StructureInstance): string => {
   }
 
   if (definition.stats.queueCapacity) {
-    return `TRAIN QUEUE +${definition.stats.queueCapacity} / building`;
+    return `QUEUE +${definition.stats.queueCapacity} / bldg`;
   }
 
   if (structure.buildingId === 'auto_turret') {
-    return `DEF POWER ${90 + (structure.level - 1) * 20}`;
+    return `DEF ${90 + (structure.level - 1) * 20}`;
   }
 
   return `HP ${definition.stats.hp}`;
 };
 
-const getSelectedSummary = (state: GameState, structure: StructureInstance | undefined): string => {
+const getCompactSelectedSummary = (
+  state: GameState,
+  structure: StructureInstance | undefined
+): string => {
   if (!structure?.buildingId) {
     return [
-      'NO STRUCTURE SELECTED',
-      'Tap a built slot on the right.',
-      'Upgrade cost and building output',
-      'will appear here.'
+      'NO STRUCTURE FOCUSED',
+      'Tap a built slot in the grid.',
+      'HQ Up and Upgrade use the current focus.'
     ].join('\n');
   }
 
   const definition = balance.buildingMap[structure.buildingId];
   const upgradeCost = getStructureUpgradeCost(definition.cost, structure.level);
-  const upgradeSec = Math.ceil(
-    definition.buildTimeSec * (1 + structure.level * 0.25)
-  );
-  const status = structure.completeAt
-    ? `BUILDING ${getEtaSec(structure.completeAt, state.now)}s`
-    : 'ACTIVE';
 
   return [
-    `SLOT ${structure.slotId}`,
-    `${STRUCTURE_LABELS[structure.buildingId]} Lv.${structure.level}`,
-    `STATUS ${status}`,
+    `${STRUCTURE_LABELS[structure.buildingId]} ${structure.slotId} L${structure.level}`,
+    structure.completeAt ? `BUILD ETA ${getEtaSec(structure.completeAt, state.now)}s` : 'STATUS ACTIVE',
     getStructureDetail(structure),
-    `NEXT ${formatResources(upgradeCost, true)}`,
-    `NEXT TIME ${upgradeSec}s`
+    `NEXT ${formatResources(upgradeCost, true)}`
   ].join('\n');
 };
 
-const getLossCount = (losses: Record<string, number>): number =>
-  Object.values(losses).reduce((total, value) => total + value, 0);
+const getResearchUnitsLabel = (trackId: ResearchTrackId): string =>
+  trackId === 'barracks' ? 'SCAV / RIFLE' : 'SHIELD / BUGGY / DRONE';
+
+const getMissionLine = (
+  mission: GameState['meta']['dailyMissions'][number] | undefined,
+  index: number
+): string => {
+  if (!mission) {
+    return `${index + 1} EMPTY`;
+  }
+
+  const status = mission.claimed
+    ? 'DONE'
+    : mission.progress >= mission.target
+      ? 'READY'
+      : `${mission.progress}/${mission.target}`;
+  const label = mission.label.toUpperCase().replace('MISSION', '').trim();
+  return `${index + 1} ${status} ${label}`;
+};
+
+const canBuildStructure = (state: GameState, buildingId: string): boolean => {
+  const definition = balance.buildingMap[buildingId];
+  const currentCount = state.base.structures.filter(
+    (structure) => structure.buildingId === buildingId
+  ).length;
+
+  return (
+    state.base.hqLevel >= definition.unlockHqLevel &&
+    currentCount < definition.maxCount &&
+    state.base.structures.some((structure) => !structure.buildingId) &&
+    canAfford(state.resources, definition.cost)
+  );
+};
+
+const canTrainUnit = (state: GameState, unitId: string): boolean => {
+  const unit = balance.unitMap[unitId];
+  const buildingCount = state.base.structures.filter(
+    (structure) => structure.buildingId === unit.trainBuildingId
+  ).length;
+  const queueCapacity =
+    buildingCount * (balance.buildingMap[unit.trainBuildingId].stats.queueCapacity ?? 0);
+
+  return (
+    state.base.hqLevel >= unit.unlockHqLevel &&
+    buildingCount > 0 &&
+    state.base.trainingQueues[unit.trainBuildingId].length < queueCapacity &&
+    canAfford(state.resources, unit.cost)
+  );
+};
+
+const canUpgradeSelectedStructure = (
+  state: GameState,
+  selectedStructure: StructureInstance | undefined
+): boolean => {
+  if (!selectedStructure?.buildingId) {
+    return false;
+  }
+
+  return canAfford(
+    state.resources,
+    getStructureUpgradeCost(balance.buildingMap[selectedStructure.buildingId].cost, selectedStructure.level)
+  );
+};
+
+const summarizeUnlockLabels = (labels: string[], maxItems = 4): string => {
+  if (labels.length === 0) {
+    return 'NONE';
+  }
+
+  if (labels.length <= maxItems) {
+    return labels.join(' / ');
+  }
+
+  return `${labels.slice(0, maxItems).join(' / ')} +${labels.length - maxItems}`;
+};
+
+const formatLockedGroup = (
+  locks: Array<{ label: string; unlockHqLevel: number }>
+): string => {
+  if (locks.length === 0) {
+    return 'NONE';
+  }
+
+  const grouped = new Map<number, string[]>();
+
+  locks.forEach((entry) => {
+    const current = grouped.get(entry.unlockHqLevel) ?? [];
+    current.push(entry.label);
+    grouped.set(entry.unlockHqLevel, current);
+  });
+
+  return [...grouped.entries()]
+    .sort(([left], [right]) => left - right)
+    .map(
+      ([unlockHqLevel, labels]) =>
+        `HQ${unlockHqLevel} ${summarizeUnlockLabels(labels, 3)}`
+    )
+    .join(' | ');
+};
+
+const getMilestonePreview = (milestone: UnlockMilestone | undefined): string[] => {
+  if (!milestone) {
+    return ['MAX HQ', 'ALL CORE UNLOCKS OPEN'];
+  }
+
+  return [
+    `NEXT HQ${milestone.hqLevel}`,
+    summarizeUnlockLabels(getUnlockMilestoneItems(milestone), 4)
+  ];
+};
+
+const getActionModeHint = (
+  actionMode: ActionMode,
+  unlockStatus: UnlockStatus,
+  unlockMilestones: UnlockMilestone[]
+): string => {
+  if (actionMode === 'build') {
+    return `BUILD LOCK ${formatLockedGroup(unlockStatus.buildingsLocked)}`;
+  }
+
+  if (actionMode === 'train') {
+    const garageNeed = unlockStatus.facilityNeeds.find(
+      (entry) => entry.buildingLabel === 'GARAGE'
+    );
+
+    if (garageNeed) {
+      return `BUILD GARAGE FOR ${summarizeUnlockLabels(garageNeed.unitLabels, 3)}`;
+    }
+
+    return `TRAIN LOCK ${formatLockedGroup(unlockStatus.unitsLocked)}`;
+  }
+
+  if (actionMode === 'ops') {
+    const nextMilestone = unlockMilestones[0];
+    return nextMilestone
+      ? `NEXT HQ${nextMilestone.hqLevel} ${summarizeUnlockLabels(getUnlockMilestoneItems(nextMilestone), 4)}`
+      : 'OPS READY MAX HQ REACHED';
+  }
+
+  if (unlockStatus.researchesLocked.length > 0) {
+    return `RES LOCK ${formatLockedGroup(unlockStatus.researchesLocked)}`;
+  }
+
+  return 'ADMIN CLAIM READY MISSIONS / RESET / REFRESH';
+};
 
 export class BaseScene extends Phaser.Scene {
-  private resourcesText?: Phaser.GameObjects.Text;
+  private static readonly LOBBY_BANNER_INSET = 58;
 
-  private hqText?: Phaser.GameObjects.Text;
+  private commandText?: Phaser.GameObjects.Text;
+
+  private missionText?: Phaser.GameObjects.Text;
 
   private rosterText?: Phaser.GameObjects.Text;
 
+  private researchText?: Phaser.GameObjects.Text;
+
   private selectedText?: Phaser.GameObjects.Text;
 
-  private logsText?: Phaser.GameObjects.Text;
+  private researchButtons: Partial<Record<ResearchTrackId, Phaser.GameObjects.Container>> = {};
 
-  private offlineText?: Phaser.GameObjects.Text;
+  private hqButton?: Phaser.GameObjects.Container;
 
-  private counterText?: Phaser.GameObjects.Text;
-
-  private dailyTexts: Phaser.GameObjects.Text[] = [];
-
-  private missionButtons: Phaser.GameObjects.Container[] = [];
-
-  private offlineButton?: Phaser.GameObjects.Container;
-
-  private counterButton?: Phaser.GameObjects.Container;
+  private upgradeButton?: Phaser.GameObjects.Container;
 
   private slotObjects: Array<{
     structure: StructureInstance;
@@ -162,162 +318,193 @@ export class BaseScene extends Phaser.Scene {
 
   private selectedStructureId: string | null = null;
 
+  private actionMode: ActionMode = 'build';
+
+  private actionTabButtons: Partial<Record<ActionMode, Phaser.GameObjects.Container>> = {};
+
+  private actionButtons: Array<{
+    button: Phaser.GameObjects.Container;
+    isEnabled: (state: GameState) => boolean;
+  }> = [];
+
+  private actionOriginX = 0;
+
+  private actionOriginY = 0;
+
   constructor() {
     super('BaseScene');
   }
 
   create(): void {
-    this.cameras.main.setBackgroundColor('#1a1511');
+    const state = gameStore.getState();
+    const commerceCapabilities = getCommerceCapabilities();
+    const reserveBannerInset =
+      !state.meta.store.adsDisabled && commerceCapabilities.bannerAds;
+    const shell = createMobileShell(this, {
+      title: 'BASE COMMAND',
+      subtitle: 'PORTRAIT OPS HUB',
+      accent: 0x8ef2d3,
+      iconKey: 'resource_scrap',
+      artKey: 'meta_loading_art',
+      artAngle: 8,
+      backgroundColor: '#17120f',
+      bottomInset: reserveBannerInset ? BaseScene.LOBBY_BANNER_INSET : 0
+    });
+    const commandY = shell.bodyTop;
+    const rosterY = commandY + 134;
+    const slotsY = rosterY + 88;
+    const focusY = slotsY + 194;
+    const opsY = focusY + 86;
 
-    createPanel(this, 18, 14, 1244, 56, undefined, 0x4e3a2f);
-    createPanel(this, 18, 82, 430, 96, 'RESOURCES', 0x9fe7f2);
-    createPanel(this, 18, 188, 430, 122, 'ROSTER', 0x6ef0ca);
-    createPanel(this, 18, 320, 430, 180, 'SELECTED', 0xf0c27b);
-    createPanel(this, 18, 510, 430, 180, 'RECENT LOGS', 0xc98c52);
-    createPanel(this, 462, 82, 214, 110, 'OFFLINE', 0x8dd8e7);
-    createPanel(this, 686, 82, 352, 110, 'DAILY OPS', 0x94efb0);
-    createPanel(this, 1048, 82, 214, 110, 'COUNTER', 0xf09b62);
-    createPanel(this, 462, 202, 800, 362, 'BASE SLOTS', 0x8ef2d3);
-    createPanel(this, 462, 574, 800, 116, 'ACTIONS', 0xd08c55);
+    shell.createSection(commandY, 126, 'COMMAND', 0x9fe7f2);
+    shell.createSection(rosterY, 80, 'ROSTER / RESEARCH', 0x6ef0ca);
+    shell.createSection(slotsY, 186, 'BASE GRID', 0xf0c27b);
+    shell.createSection(focusY, 78, 'FOCUS', 0xc98c52);
+    shell.createSection(opsY, 92, undefined, 0xd08c55);
 
-    this.add
-      .text(24, 20, 'SCRAP FRONTIER / BASE', {
-        fontSize: '28px',
-        color: '#f5ddb7',
-        fontFamily: 'monospace'
-      })
-      .setDepth(1);
-
-    createButton(
-      this,
-      1162,
-      37,
-      150,
-      34,
-      'Restart Tutorial',
-      () => {
-        gameStore.restartTutorial();
-        this.scene.restart();
-      },
-      0x27424b
-    );
-
-    addAssetImage(this, 'resource_scrap', 46, 126, 36);
-    addAssetImage(this, 'resource_power', 186, 126, 36);
-    addAssetImage(this, 'resource_core', 326, 126, 36);
-
-    this.resourcesText = this.add.text(70, 114, '', {
-      fontSize: '20px',
-      color: '#d9fff7',
+    this.add.text(shell.contentX + 16, opsY + 10, 'OPERATIONS', {
+      fontSize: '12px',
+      color: '#f3ead9',
       fontFamily: 'monospace'
     });
-    this.hqText = this.add.text(30, 144, '', {
-      fontSize: '15px',
-      color: '#ffd18a',
-      fontFamily: 'monospace',
-      wordWrap: { width: 396 }
-    });
-    this.rosterText = this.add.text(30, 226, '', {
-      fontSize: '15px',
+
+    this.commandText = this.add.text(shell.contentX + 16, commandY + 38, '', {
+      fontSize: '13px',
       color: '#f3ead9',
       fontFamily: 'monospace',
-      wordWrap: { width: 396 }
+      wordWrap: { width: 214 }
     });
-    this.selectedText = this.add.text(30, 356, '', {
-      fontSize: '14px',
-      color: '#96f2dd',
+    this.missionText = this.add.text(shell.contentX + 244, commandY + 38, '', {
+      fontSize: '10px',
+      color: '#d8fff5',
       fontFamily: 'monospace',
-      wordWrap: { width: 390 }
+      wordWrap: { width: 128 }
     });
-    this.logsText = this.add.text(30, 546, '', {
-      fontSize: '12px',
-      color: '#c7bbb0',
-      fontFamily: 'monospace',
-      wordWrap: { width: 390 }
-    });
-    this.offlineText = this.add.text(476, 118, '', {
-      fontSize: '13px',
-      color: '#e8fdfd',
-      fontFamily: 'monospace',
-      wordWrap: { width: 186 }
-    });
-    addAssetImage(this, 'ui_badge_daily_mission', 724, 148, 42);
-    addAssetImage(this, 'ui_icon_alert', 1086, 146, 40);
-    this.counterText = this.add.text(1062, 118, '', {
-      fontSize: '13px',
-      color: '#fff1de',
-      fontFamily: 'monospace',
-      wordWrap: { width: 186 }
-    });
-
-    for (let index = 0; index < 3; index += 1) {
-      this.dailyTexts.push(
-        this.add.text(698, 114 + index * 24, '', {
-          fontSize: '12px',
-          color: '#f3ead9',
-          fontFamily: 'monospace',
-          wordWrap: { width: 228 }
-        })
-      );
-      this.missionButtons.push(
-        createButton(
-          this,
-          994,
-          124 + index * 24,
-          64,
-          20,
-          'Claim',
-          () => {
-            const mission = gameStore.getState().meta.dailyMissions[index];
-            if (mission) {
-              gameStore.claimMission(mission.id);
-            }
-          },
-          0x2e4032
-        )
-      );
-    }
-
-    this.offlineButton = createButton(
+    createButton(
       this,
-      616,
-      162,
-      86,
-      24,
-      'Clear',
-      () => gameStore.clearOfflineReward(),
-      0x28454d
+      shell.contentX + 222,
+      commandY + 102,
+      68,
+      20,
+      'Scout',
+      () => this.scene.start('ScoutScene'),
+      0x27424b
     );
-    this.counterButton = createButton(
+    createButton(
       this,
-      1156,
-      162,
-      156,
-      24,
-      'Resolve Wave',
-      () => gameStore.resolveCounterAttack(),
+      shell.contentX + 302,
+      commandY + 102,
+      68,
+      20,
+      'Shop',
+      () => this.scene.start('ShopScene'),
+      0x35574a
+    );
+    this.rosterText = this.add.text(shell.contentX + 16, rosterY + 36, '', {
+      fontSize: '11px',
+      color: '#f3ead9',
+      fontFamily: 'monospace',
+      wordWrap: { width: 206 }
+    });
+    this.researchText = this.add.text(shell.contentX + 224, rosterY + 36, '', {
+      fontSize: '10px',
+      color: '#d9fff7',
+      fontFamily: 'monospace',
+      wordWrap: { width: 148 }
+    });
+    this.selectedText = this.add.text(shell.contentX + 16, focusY + 36, '', {
+      fontSize: '10px',
+      color: '#f3ead9',
+      fontFamily: 'monospace',
+      wordWrap: { width: 244 }
+    });
+
+    this.researchButtons.barracks = createButton(
+      this,
+      shell.contentX + 252,
+      rosterY + 66,
+      68,
+      22,
+      'Inf +',
+      () => gameStore.upgradeResearch('barracks'),
+      0x304032
+    );
+    this.researchButtons.garage = createButton(
+      this,
+      shell.contentX + 336,
+      rosterY + 66,
+      68,
+      22,
+      'Mech +',
+      () => gameStore.upgradeResearch('garage'),
+      0x2d3947
+    );
+
+    this.hqButton = createButton(
+      this,
+      shell.contentX + 294,
+      focusY + 38,
+      74,
+      22,
+      'HQ Up',
+      () => gameStore.levelUpHq(),
+      0x4d3323
+    );
+    this.upgradeButton = createButton(
+      this,
+      shell.contentX + 294,
+      focusY + 64,
+      74,
+      22,
+      'Upgrade',
+      () => {
+        if (this.selectedStructureId) {
+          gameStore.upgrade(this.selectedStructureId);
+        }
+      },
       0x4d3323
     );
 
-    this.createSlots();
-    this.createControlButtons();
+    this.actionOriginX = shell.contentX;
+    this.actionOriginY = opsY;
+    this.createSlots(shell.contentX + 10, slotsY + 38);
+    this.createActionTabs();
+    this.renderActionButtons();
+
+    this.selectedStructureId =
+      gameStore.getState().base.structures.find((structure) => structure.buildingId)?.id ?? null;
+
     this.refresh();
     createTutorialOverlay(this, 'BaseScene');
+    void this.syncLobbyBanner();
+    this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => {
+      void hideBannerPlacementThroughPlatform();
+    });
   }
 
-  private createSlots(): void {
+  private async syncLobbyBanner(): Promise<void> {
     const state = gameStore.getState();
-    const startX = 482;
-    const startY = 238;
-    const columns = 4;
-    const slotWidth = 182;
-    const slotHeight = 82;
+    const commerceCapabilities = getCommerceCapabilities();
+
+    if (state.meta.store.adsDisabled || !commerceCapabilities.bannerAds) {
+      await hideBannerPlacementThroughPlatform();
+      return;
+    }
+
+    await showBannerPlacementThroughPlatform('base_lobby');
+  }
+
+  private createSlots(startX: number, startY: number): void {
+    const state = gameStore.getState();
+    const columns = 2;
+    const slotWidth = 180;
+    const slotHeight = 34;
 
     this.slotObjects = state.base.structures.map((structure, index) => {
       const column = index % columns;
       const row = Math.floor(index / columns);
-      const x = startX + column * (slotWidth + 12);
-      const y = startY + row * (slotHeight + 12);
+      const x = startX + column * 188;
+      const y = startY + row * 42;
 
       const box = this.add
         .rectangle(x, y, slotWidth, slotHeight, 0x231d18, 1)
@@ -325,13 +512,13 @@ export class BaseScene extends Phaser.Scene {
         .setStrokeStyle(2, 0x6a4d35)
         .setInteractive({ useHandCursor: true });
       const icon = structure.buildingId
-        ? addBuildingImage(this, structure.buildingId, x + 28, y + 41, 40)
+        ? addBuildingImage(this, structure.buildingId, x + 18, y + 17, 22)
         : null;
-      const label = this.add.text(x + 54, y + 10, '', {
-        fontSize: '13px',
+      const label = this.add.text(x + 34, y + 5, '', {
+        fontSize: '10px',
         color: '#f3ead9',
         fontFamily: 'monospace',
-        wordWrap: { width: slotWidth - 64 }
+        wordWrap: { width: slotWidth - 44 }
       });
 
       box.on('pointerdown', () => {
@@ -349,62 +536,260 @@ export class BaseScene extends Phaser.Scene {
     });
   }
 
-  private createControlButtons(): void {
-    createButton(this, 547, 630, 122, 44, 'Build Scrap', () => gameStore.build('scrap_yard'));
-    createButton(this, 679, 630, 122, 44, 'Build Power', () => gameStore.build('generator'));
-    createButton(this, 811, 630, 122, 44, 'Build Barracks', () => gameStore.build('barracks'));
-    createButton(this, 943, 630, 122, 44, 'Build Garage', () => gameStore.build('garage'));
-    createButton(this, 1075, 630, 122, 44, 'Build Storage', () => gameStore.build('storage'));
-    createButton(this, 1207, 630, 104, 44, 'Turret', () => gameStore.build('auto_turret'));
+  private createActionTabs(): void {
+    const tabs: Array<{ mode: ActionMode; label: string; color: number }> = [
+      { mode: 'build', label: 'BUILD', color: 0x35574a },
+      { mode: 'train', label: 'TRAIN', color: 0x304032 },
+      { mode: 'ops', label: 'OPS', color: 0x4d3323 },
+      { mode: 'admin', label: 'ADMIN', color: 0x2d3947 }
+    ];
 
-    createButton(this, 547, 676, 122, 28, 'Train Scav', () => gameStore.queueUnit('scavenger'), 0x20322d);
-    createButton(this, 679, 676, 122, 28, 'Train Rifle', () => gameStore.queueUnit('rifleman'), 0x20322d);
-    createButton(this, 811, 676, 122, 28, 'Train Shield', () => gameStore.queueUnit('shieldbot'), 0x20322d);
-    createButton(this, 943, 676, 122, 28, 'Train Buggy', () => gameStore.queueUnit('rocket_buggy'), 0x20322d);
-    createButton(this, 1075, 676, 122, 28, 'Train Drone', () => gameStore.queueUnit('repair_drone'), 0x20322d);
-    createButton(this, 1207, 676, 104, 28, 'Scout', () => this.scene.start('ScoutScene'), 0x27424b);
-
-    createButton(this, 364, 448, 112, 32, 'HQ Up', () => gameStore.levelUpHq(), 0x4d3323);
-    createButton(
-      this,
-      364,
-      484,
-      112,
-      32,
-      'Upgrade',
-      () => {
-        if (this.selectedStructureId) {
-          gameStore.upgrade(this.selectedStructureId);
-        }
-      },
-      0x4d3323
-    );
-    createButton(this, 364, 520, 112, 32, 'Reset Save', () => gameStore.reset(), 0x5a2424);
+    tabs.forEach((tab, index) => {
+      this.actionTabButtons[tab.mode] = createButton(
+        this,
+        this.actionOriginX + 44 + index * 96,
+        this.actionOriginY + 28,
+        88,
+        20,
+        tab.label,
+        () => {
+          this.actionMode = tab.mode;
+          this.renderActionButtons();
+          this.refresh();
+        },
+        tab.color
+      );
+    });
   }
 
-  private updateDailyMissionWidgets(missions: DailyMission[]): void {
-    this.dailyTexts.forEach((text, index) => {
-      const mission = missions[index];
-      const button = this.missionButtons[index];
+  private getActionDefinitions(): ActionButtonDefinition[] {
+    if (this.actionMode === 'build') {
+      return [
+        {
+          label: 'Build Scrap',
+          onClick: () => gameStore.build('scrap_yard'),
+          fillColor: 0x35574a,
+          isEnabled: (state) => canBuildStructure(state, 'scrap_yard')
+        },
+        {
+          label: 'Build Power',
+          onClick: () => gameStore.build('generator'),
+          fillColor: 0x35574a,
+          isEnabled: (state) => canBuildStructure(state, 'generator')
+        },
+        {
+          label: 'Barracks',
+          onClick: () => gameStore.build('barracks'),
+          fillColor: 0x35574a,
+          isEnabled: (state) => canBuildStructure(state, 'barracks')
+        },
+        {
+          label: 'Garage',
+          onClick: () => gameStore.build('garage'),
+          fillColor: 0x35574a,
+          isEnabled: (state) => canBuildStructure(state, 'garage')
+        },
+        {
+          label: 'Storage',
+          onClick: () => gameStore.build('storage'),
+          fillColor: 0x35574a,
+          isEnabled: (state) => canBuildStructure(state, 'storage')
+        },
+        {
+          label: 'Turret',
+          onClick: () => gameStore.build('auto_turret'),
+          fillColor: 0x35574a,
+          isEnabled: (state) => canBuildStructure(state, 'auto_turret')
+        }
+      ];
+    }
 
-      if (!mission) {
-        text.setVisible(false);
-        button.setVisible(false);
-        return;
+    if (this.actionMode === 'train') {
+      return [
+        {
+          label: 'Train Scav',
+          onClick: () => gameStore.queueUnit('scavenger'),
+          fillColor: 0x304032,
+          isEnabled: (state) => canTrainUnit(state, 'scavenger')
+        },
+        {
+          label: 'Train Rifle',
+          onClick: () => gameStore.queueUnit('rifleman'),
+          fillColor: 0x304032,
+          isEnabled: (state) => canTrainUnit(state, 'rifleman')
+        },
+        {
+          label: 'Train Shield',
+          onClick: () => gameStore.queueUnit('shieldbot'),
+          fillColor: 0x304032,
+          isEnabled: (state) => canTrainUnit(state, 'shieldbot')
+        },
+        {
+          label: 'Train Buggy',
+          onClick: () => gameStore.queueUnit('rocket_buggy'),
+          fillColor: 0x304032,
+          isEnabled: (state) => canTrainUnit(state, 'rocket_buggy')
+        },
+        {
+          label: 'Train Drone',
+          onClick: () => gameStore.queueUnit('repair_drone'),
+          fillColor: 0x304032,
+          isEnabled: (state) => canTrainUnit(state, 'repair_drone')
+        },
+        {
+          label: 'Scout Map',
+          onClick: () => this.scene.start('ScoutScene'),
+          fillColor: 0x27424b,
+          isEnabled: () => true
+        }
+      ];
+    }
+
+    if (this.actionMode === 'ops') {
+      return [
+        {
+          label: 'HQ Up',
+          onClick: () => gameStore.levelUpHq(),
+          fillColor: 0x4d3323,
+          isEnabled: (state) => {
+            const nextCost = getHqLevelCost(state.base.hqLevel + 1);
+            return nextCost !== null && canAfford(state.resources, nextCost);
+          }
+        },
+        {
+          label: 'Upgrade',
+          onClick: () => {
+            if (this.selectedStructureId) {
+              gameStore.upgrade(this.selectedStructureId);
+            }
+          },
+          fillColor: 0x4d3323,
+          isEnabled: (state) =>
+            canUpgradeSelectedStructure(
+              state,
+              state.base.structures.find((structure) => structure.id === this.selectedStructureId)
+            )
+        },
+        {
+          label: 'Scout',
+          onClick: () => this.scene.start('ScoutScene'),
+          fillColor: 0x27424b,
+          isEnabled: () => true
+        },
+        {
+          label: 'Shop',
+          onClick: () => this.scene.start('ShopScene'),
+          fillColor: 0x35574a,
+          isEnabled: () => true
+        },
+        {
+          label: 'Offline',
+          onClick: () => gameStore.clearOfflineReward(),
+          fillColor: 0x28454d,
+          isEnabled: (state) => state.pendingOfflineReward !== null
+        },
+        {
+          label: 'Counter',
+          onClick: () => gameStore.resolveCounterAttack(),
+          fillColor: 0x4d3323,
+          isEnabled: (state) => state.meta.counterThreat >= 100
+        }
+      ];
+    }
+
+    return [
+      {
+        label: 'Claim M1',
+        onClick: () => {
+          const mission = gameStore.getState().meta.dailyMissions[0];
+          if (mission) {
+            gameStore.claimMission(mission.id);
+          }
+        },
+        fillColor: 0x35574a,
+        isEnabled: (state) => {
+          const mission = state.meta.dailyMissions[0];
+          return Boolean(mission && !mission.claimed && mission.progress >= mission.target);
+        }
+      },
+      {
+        label: 'Claim M2',
+        onClick: () => {
+          const mission = gameStore.getState().meta.dailyMissions[1];
+          if (mission) {
+            gameStore.claimMission(mission.id);
+          }
+        },
+        fillColor: 0x35574a,
+        isEnabled: (state) => {
+          const mission = state.meta.dailyMissions[1];
+          return Boolean(mission && !mission.claimed && mission.progress >= mission.target);
+        }
+      },
+      {
+        label: 'Claim M3',
+        onClick: () => {
+          const mission = gameStore.getState().meta.dailyMissions[2];
+          if (mission) {
+            gameStore.claimMission(mission.id);
+          }
+        },
+        fillColor: 0x35574a,
+        isEnabled: (state) => {
+          const mission = state.meta.dailyMissions[2];
+          return Boolean(mission && !mission.claimed && mission.progress >= mission.target);
+        }
+      },
+      {
+        label: 'Reset Save',
+        onClick: () => {
+          gameStore.reset();
+          this.scene.restart();
+        },
+        fillColor: 0x5a2424,
+        isEnabled: () => true
+      },
+      {
+        label: 'Tutorial',
+        onClick: () => {
+          gameStore.restartTutorial();
+          this.scene.restart();
+        },
+        fillColor: 0x27424b,
+        isEnabled: () => true
+      },
+      {
+        label: 'Refresh',
+        onClick: () => gameStore.refreshScoutTargets(),
+        fillColor: 0x2d3947,
+        isEnabled: () => true
       }
+    ];
+  }
 
-      text.setVisible(true);
-      button.setVisible(true);
+  private renderActionButtons(): void {
+    this.actionButtons.forEach(({ button }) => button.destroy());
+    this.actionButtons = [];
 
-      const status = mission.claimed
-        ? 'DONE'
-        : mission.progress >= mission.target
-          ? 'READY'
-          : `${mission.progress}/${mission.target}`;
-      text.setText(
-        `${mission.label} ${status}`
+    const definitions = this.getActionDefinitions();
+    definitions.forEach((definition, index) => {
+      const column = index % 3;
+      const row = Math.floor(index / 3);
+      const button = createButton(
+        this,
+        this.actionOriginX + 59 + column * 135,
+        this.actionOriginY + 52 + row * 28,
+        118,
+        24,
+        definition.label,
+        definition.onClick,
+        definition.fillColor
       );
-      button.setAlpha(mission.claimed || mission.progress < mission.target ? 0.35 : 1);
+
+      this.actionButtons.push({
+        button,
+        isEnabled: definition.isEnabled
+      });
     });
   }
 
@@ -419,11 +804,11 @@ export class BaseScene extends Phaser.Scene {
         ? STRUCTURE_LABELS[liveStructure.buildingId]
         : 'EMPTY';
       const busy = liveStructure.completeAt
-        ? `\nETA ${getEtaSec(liveStructure.completeAt, state.now)}s`
+        ? ` ETA ${getEtaSec(liveStructure.completeAt, state.now)}s`
         : '';
 
       slotObject.label.setText(
-        `${liveStructure.slotId}\n${label}${liveStructure.level > 0 ? ` L${liveStructure.level}` : ''}${busy}`
+        `${liveStructure.slotId.toUpperCase()}\n${label}${liveStructure.level > 0 ? ` L${liveStructure.level}` : ''}${busy}`
       );
 
       if (slotObject.buildingId !== liveStructure.buildingId) {
@@ -432,16 +817,16 @@ export class BaseScene extends Phaser.Scene {
           ? addBuildingImage(
               this,
               liveStructure.buildingId,
-              slotObject.box.x + 28,
-              slotObject.box.y + 41,
-              40
+              slotObject.box.x + 18,
+              slotObject.box.y + 17,
+              22
             )
           : null;
         slotObject.buildingId = liveStructure.buildingId;
       }
 
       const isSelected = this.selectedStructureId === liveStructure.id;
-      slotObject.box.setStrokeStyle(2, isSelected ? 0x6ef0ca : 0x6a4d35);
+      slotObject.box.setStrokeStyle(2, isSelected ? 0x8ef2d3 : 0x6a4d35);
       slotObject.box.setFillStyle(
         liveStructure.buildingId ? (liveStructure.completeAt ? 0x403124 : 0x2a241f) : 0x191513,
         1
@@ -451,60 +836,98 @@ export class BaseScene extends Phaser.Scene {
 
   private refresh(): void {
     const state = gameStore.getState();
+
+    if (!this.selectedStructureId) {
+      this.selectedStructureId =
+        state.base.structures.find((structure) => structure.buildingId)?.id ?? null;
+    }
+
+    const selected = state.base.structures.find(
+      (structure) => structure.id === this.selectedStructureId
+    );
     const nextHqCost = getHqLevelCost(state.base.hqLevel + 1);
     const barracksQueue = getQueueStatus(state.base.trainingQueues.barracks, state.now);
     const garageQueue = getQueueStatus(state.base.trainingQueues.garage, state.now);
-    const selected = state.base.structures.find((entry) => entry.id === this.selectedStructureId);
     const offline = state.pendingOfflineReward;
-    const counterReady = state.meta.counterThreat >= 100;
-    const lastCounter = state.lastCounterAttack;
+    const unlockStatus = getUnlockStatus(state, balance);
+    const unlockMilestones = getUpcomingUnlockMilestones(state, balance, 2);
+    const nextMilestonePreview = getMilestonePreview(unlockMilestones[0]);
+    const actionHint = getActionModeHint(this.actionMode, unlockStatus, unlockMilestones);
 
-    this.resourcesText?.setText(
-      `SCRAP ${state.resources.scrap}     POWER ${state.resources.power}     CORE ${state.resources.core}`
+    this.commandText?.setText(
+      [
+        `SCRAP ${state.resources.scrap} | POWER ${state.resources.power} | CORE ${state.resources.core}`,
+        `HQ ${state.base.hqLevel} | ZONE ${state.meta.zoneTier} | THREAT ${state.meta.counterThreat}/100`,
+        `OFFLINE ${offline ? `${offline.minutes}m` : 'SYNCED'} | TARGETS ${state.base.scoutTargets.length} | COUNTER ${
+          state.meta.counterThreat >= 100 ? 'READY' : 'BUILDING'
+        }`,
+        actionHint
+      ].join('\n')
     );
-    this.hqText?.setText(
-      nextHqCost
-        ? `HQ Lv.${state.base.hqLevel} | Zone ${state.meta.zoneTier} | Threat ${state.meta.counterThreat}\nNEXT HQ ${formatResources(nextHqCost, true)}`
-        : `HQ Lv.${state.base.hqLevel} | Zone ${state.meta.zoneTier} | Threat ${state.meta.counterThreat}\nHQ MAXED FOR MVP`
+
+    this.missionText?.setText(
+      [
+        'DAILY OPS',
+        ...state.meta.dailyMissions.slice(0, 3).map(getMissionLine),
+        ...nextMilestonePreview
+      ].join('\n')
     );
+
     this.rosterText?.setText(
-      `ACTIVE UNITS\n${UNIT_LABELS.scavenger} ${state.roster.scavenger ?? 0} | ${UNIT_LABELS.rifleman} ${state.roster.rifleman ?? 0}\n${UNIT_LABELS.shieldbot} ${state.roster.shieldbot ?? 0} | ${UNIT_LABELS.rocket_buggy} ${state.roster.rocket_buggy ?? 0} | ${UNIT_LABELS.repair_drone} ${state.roster.repair_drone ?? 0}\n\nTRAINING\nBARRACKS ${barracksQueue}\nGARAGE ${garageQueue}`
+      [
+        'UNITS',
+        `${UNIT_LABELS.scavenger} ${state.roster.scavenger ?? 0} | ${UNIT_LABELS.rifleman} ${state.roster.rifleman ?? 0}`,
+        `${UNIT_LABELS.shieldbot} ${state.roster.shieldbot ?? 0} | ${UNIT_LABELS.rocket_buggy} ${state.roster.rocket_buggy ?? 0}`,
+        `${UNIT_LABELS.repair_drone} ${state.roster.repair_drone ?? 0}`,
+        `QUEUE B ${barracksQueue} | G ${garageQueue}`
+      ].join('\n')
     );
-    this.selectedText?.setText(getSelectedSummary(state, selected));
-    this.logsText?.setText(
-      state.logs
-        .slice(-8)
-        .map((log) => `${log.event} ${log.extra ? JSON.stringify(log.extra) : ''}`)
-        .join('\n')
-    );
-    this.offlineText?.setText(
-      offline
-        ? `AUTO COLLECTED\n${offline.minutes} min\nGAIN ${formatResources(offline.reward, true)}`
-        : 'NO OFFLINE REPORT\nCurrent session synced.'
-    );
-    this.offlineButton?.setVisible(Boolean(offline));
 
-    this.updateDailyMissionWidgets(state.meta.dailyMissions);
+    this.researchText?.setText(
+      (['barracks', 'garage'] as const)
+        .map((trackId) => {
+          const definition = getResearchDefinition(trackId);
+          const level = state.meta.researches[trackId];
+          const unlocked = state.base.hqLevel >= definition.unlockHqLevel;
+          const nextCost = getResearchCost(trackId, level + 1);
 
-    this.counterText?.setText(
-      lastCounter
-        ? [
-            `THREAT ${state.meta.counterThreat}/100`,
-            counterReady ? 'STATUS READY' : 'STATUS BUILDING',
-            `LAST ${lastCounter.victory ? 'HELD' : 'BREACH'}`,
-            `P ${lastCounter.playerPower} / E ${lastCounter.enemyPower}`,
-            `LOSS U ${getLossCount(lastCounter.losses)} | ${formatResources(lastCounter.resourceLoss, true)}`
-          ].join('\n')
-        : [
-            `THREAT ${state.meta.counterThreat}/100`,
-            counterReady ? 'STATUS READY' : 'STATUS BUILDING',
-            'Resolve wave at 100 threat.',
-            'Turrets and roster lower losses.'
-          ].join('\n')
+          if (!unlocked) {
+            return `${definition.shortLabel} LOCK HQ${definition.unlockHqLevel}\n${getResearchUnitsLabel(trackId)}`;
+          }
+
+          return `${definition.shortLabel} L${level}/${definition.maxLevel}\n${nextCost ? `NEXT ${formatResources(nextCost, true)}` : 'MAXED'}\n${getResearchUnitsLabel(trackId)}`;
+        })
+        .join('\n\n')
     );
-    this.counterButton?.setAlpha(counterReady ? 1 : 0.35);
+
+    this.selectedText?.setText(
+      [getCompactSelectedSummary(state, selected)].filter(Boolean).join('\n')
+    );
+
+    (['barracks', 'garage'] as const).forEach((trackId) => {
+      const definition = getResearchDefinition(trackId);
+      const level = state.meta.researches[trackId];
+      const nextCost = getResearchCost(trackId, level + 1);
+      const unlocked = state.base.hqLevel >= definition.unlockHqLevel;
+      const available = unlocked && nextCost !== null && canAfford(state.resources, nextCost);
+      this.researchButtons[trackId]?.setAlpha(
+        !unlocked || nextCost === null ? 0.35 : available ? 1 : 0.55
+      );
+    });
+
+    this.hqButton?.setAlpha(
+      nextHqCost === null ? 0.35 : canAfford(state.resources, nextHqCost) ? 1 : 0.55
+    );
+    this.upgradeButton?.setAlpha(canUpgradeSelectedStructure(state, selected) ? 1 : 0.45);
 
     this.updateSlotLabels(state);
+
+    Object.entries(this.actionTabButtons).forEach(([mode, button]) => {
+      button?.setAlpha(mode === this.actionMode ? 1 : 0.6);
+    });
+    this.actionButtons.forEach(({ button, isEnabled }) => {
+      button.setAlpha(isEnabled(state) ? 1 : 0.35);
+    });
   }
 
   update(): void {

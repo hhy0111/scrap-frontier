@@ -1,5 +1,26 @@
 import type { ResourceAmount } from './balance';
 
+export type ResearchTrackId = 'barracks' | 'garage';
+
+export type ResearchLevels = Record<ResearchTrackId, number>;
+
+export type ShopOfferId = 'starter_pack' | 'commander_pack' | 'monthly_pass';
+
+export type RewardedPlacementId =
+  | 'salvage_drop'
+  | 'scout_ping'
+  | 'offline_overdrive';
+
+export type BannerPlacementId = 'base_lobby';
+
+export type StoreState = {
+  purchases: Record<ShopOfferId, boolean>;
+  adsDisabled: boolean;
+  rewardedAdsWatched: number;
+  lastRewardedPlacement: RewardedPlacementId | null;
+  monthlySupplyClaimDay: number | null;
+};
+
 export type DailyMissionType = 'raid_win' | 'train_unit' | 'build_any';
 
 export type DailyMission = {
@@ -15,6 +36,7 @@ export type DailyMission = {
 export type OfflineRewardSummary = {
   minutes: number;
   reward: ResourceAmount;
+  boosted: boolean;
 };
 
 export type CounterAttackSummary = {
@@ -48,6 +70,8 @@ export type ScoutTarget = {
   recommendedPower: number;
   storedRewards: ResourceAmount;
   zoneTier: number;
+  turrets: number;
+  defenderCount: number;
 };
 
 export type DebugLog = {
@@ -88,6 +112,8 @@ export type GameState = {
     counterThreat: number;
     dayIndex: number;
     dailyMissions: DailyMission[];
+    researches: ResearchLevels;
+    store: StoreState;
     tutorialStep: number;
     tutorialDismissed: boolean;
   };
